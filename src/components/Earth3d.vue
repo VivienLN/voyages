@@ -5,7 +5,16 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 const CONFIG = {
     enableOrbit: false,
-    maxCameraPan: .25,
+    maxCameraPan: .5,
+    cameraZ: 2.8,
+    gps: {
+        latitude: 48.85655595428851,
+        longitude: 2.352021668887112, 
+        // Texture can be offset from the 0 latitude/longitude
+        // And we want an additional offset because we dont want the GPS target to be at the *center*
+        latitudeOffset: 0 - 18,
+        longitudeOffset: -90 - 12,
+    }
 }
 
 onMounted(async () => {
@@ -65,12 +74,10 @@ onMounted(async () => {
         radius: 1.6,
         height: .3,
     }
-    const ringTexture = getRingTexture("Pont du Gard".toUpperCase(), ringParams)
+    const ringTexture = getRingTexture("Lorem ipsum".toUpperCase(), ringParams)
     const ringGeometry = new THREE.CylinderGeometry(ringParams.radius, ringParams.radius, ringParams.height, 64, 1, true)
     const ringMaterial = new THREE.MeshToonMaterial({map: ringTexture, color: 0xffffff, transparent: true, opacity: .9})
     ringMaterial.side = THREE.DoubleSide
-    // ringMaterial.emissive = new THREE.Color(0xffffff)
-    // ringMaterial.emissiveIntensity = 1
     const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial)
     ringMesh.rotation.x = .09
     scene.add(ringMesh)
@@ -81,9 +88,14 @@ onMounted(async () => {
     earthGroup.add(earthMesh)
     scene.add(earthGroup)
 
+    // Move earth so that gps position faces camera (only the earth moves)
+    // earthGroup.rotation.x = CONFIG.gps.latitude * Math.PI / 180
+    earthGroup.rotation.x = (CONFIG.gps.latitude + CONFIG.gps.latitudeOffset) * Math.PI / 180
+    earthGroup.rotation.y = (-CONFIG.gps.longitude + CONFIG.gps.longitudeOffset) * Math.PI / 180
+
     // Camera
     const camera = new THREE.PerspectiveCamera(75)
-    camera.position.z = 2.5
+    camera.position.z = CONFIG.cameraZ
     camera.rotation.z = - Math.PI * 2 / 24
     scene.add(camera)
 
@@ -110,7 +122,8 @@ onMounted(async () => {
         // earthGroup.rotation.y = elapsedTime * .3
         cloudsMesh.rotation.y = elapsedTime * .01
         ringMesh.rotation.y = - elapsedTime * .1
-        // camera.lookAt(earthGroup.position)
+        camera.lookAt(earthGroup.position)
+        camera.rotation.z = - Math.PI * 2 / 24
             
         // Update controls (for testing)
         if(controls) {
@@ -147,7 +160,7 @@ onMounted(async () => {
 
 function getRingTexture(text, params) {
     // Create canvas
-    let textMargin = 100
+    let textMargin = 60
     let textureWidth = 2048 * 2
     let textureRatio = Math.PI * 2 * params.radius / params.height
     let canvas = document.createElement('canvas')
