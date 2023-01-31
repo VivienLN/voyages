@@ -3,7 +3,10 @@ import { onMounted } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
-const ENABLE_ORBIT = false
+const CONFIG = {
+    enableOrbit: false,
+    maxCameraPan: .25,
+}
 
 onMounted(async () => {
     // Load font
@@ -93,8 +96,8 @@ onMounted(async () => {
     scene.add(pointLight)
 
     // Controls (for debugging)
-    const controls = ENABLE_ORBIT ? new OrbitControls(camera, canvas) : null
-    if(ENABLE_ORBIT) {
+    const controls = CONFIG.enableOrbit ? new OrbitControls(camera, canvas) : null
+    if(controls) {
         controls.enableDamping = true
     }
 
@@ -107,6 +110,7 @@ onMounted(async () => {
         // earthGroup.rotation.y = elapsedTime * .3
         cloudsMesh.rotation.y = elapsedTime * .01
         ringMesh.rotation.y = - elapsedTime * .1
+        // camera.lookAt(earthGroup.position)
             
         // Update controls (for testing)
         if(controls) {
@@ -131,6 +135,14 @@ onMounted(async () => {
     }
     resizeHandler()
     window.addEventListener('resize', resizeHandler)
+
+    // Mouse mouve handler
+    const mouseMoveHandler = (e) => 
+    {
+        camera.position.x = (e.clientX / window.innerWidth) / 2 * CONFIG.maxCameraPan
+        camera.position.y = - (e.clientY / window.innerHeight) / 2 * CONFIG.maxCameraPan
+    }
+    window.addEventListener('mousemove', mouseMoveHandler)
 })
 
 function getRingTexture(text, params) {
