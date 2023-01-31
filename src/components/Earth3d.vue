@@ -1,8 +1,16 @@
 <script setup>
 import { onMounted } from 'vue'
 import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
-onMounted(() => {
+const ENABLE_ORBIT = false
+
+onMounted(async () => {
+    // Load font
+    var ringFont = new FontFace('ringFont', 'url(https://fonts.gstatic.com/s/jost/v14/92zPtBhPNqw79Ij1E865zBUv7mwKIjVBNIg.woff2)');
+    await ringFont.load()
+    document.fonts.add(ringFont);
+    
     // Threejs setup
     const canvas = document.querySelector('canvas')
     const scene = new THREE.Scene()
@@ -30,18 +38,39 @@ onMounted(() => {
     earthMaterial.metalnessMap = textureLoader.load('src/assets/earth3d/textures/earthmetalness.jpg')
     earthMaterial.roughnessMap = textureLoader.load('src/assets/earth3d/textures/earthroughness.jpg')
     earthMaterial.normalMap = textureLoader.load('src/assets/earth3d/textures/earthnormal.jpg')
-    earthMaterial.normalScale = new THREE.Vector2(.1, .1)
-    // earthMaterial.emissive = 0xaaddff
-    // earthMaterial.emissiveIntensity = 0
+    // earthMaterial.normalScale = new THREE.Vector2(.1, .1)
+    earthMaterial.normalScale = new THREE.Vector2(.9, .9)
+    // earthMaterial.emissiveMap = textureLoader.load('src/assets/earth3d/textures/earthmetalness.jpg')
+    // earthMaterial.emissive = new THREE.Color(0x222222)
+    let gradientMap = textureLoader.load('src/assets/earth3d/textures/gradient.jpg')
+    gradientMap.minFilter = THREE.NearestFilter
+    gradientMap.magFilter = THREE.NearestFilter
+    earthMaterial.gradientMap = gradientMap
     const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), earthMaterial)
 
     // Clouds
     const cloudsTexture = textureLoader.load('src/assets/earth3d/textures/clouds.jpg')
-    const cloudsMaterial = new THREE.MeshToonMaterial({color: 0xacdfff, transparent: true, opacity: .7})
+    const cloudsMaterial = new THREE.MeshToonMaterial({color: 0xffe4af, transparent: true, opacity: .9})
     cloudsMaterial.alphaMap = cloudsTexture
     cloudsMaterial.metalness = 0
-    cloudsMaterial.roughness = 1
+    cloudsMaterial.roughness = .6
+    cloudsMaterial.gradientMap = gradientMap
     const cloudsMesh = new THREE.Mesh(new THREE.SphereGeometry(1.02, 32, 32), cloudsMaterial)
+
+    // Ring
+    const ringParams = {
+        radius: 1.6,
+        height: .3,
+    }
+    const ringTexture = getRingTexture("Pont du Gard".toUpperCase(), ringParams)
+    const ringGeometry = new THREE.CylinderGeometry(ringParams.radius, ringParams.radius, ringParams.height, 64, 1, true)
+    const ringMaterial = new THREE.MeshToonMaterial({map: ringTexture, color: 0xffffff, transparent: true, opacity: .9})
+    ringMaterial.side = THREE.DoubleSide
+    // ringMaterial.emissive = new THREE.Color(0xffffff)
+    // ringMaterial.emissiveIntensity = 1
+    const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial)
+    ringMesh.rotation.x = .09
+    scene.add(ringMesh)
 
     // Earth group
     const earthGroup = new THREE.Group()
@@ -63,14 +92,26 @@ onMounted(() => {
     pointLight.position.set(-1, 1, 3)
     scene.add(pointLight)
 
+    // Controls (for debugging)
+    const controls = ENABLE_ORBIT ? new OrbitControls(camera, canvas) : null
+    if(ENABLE_ORBIT) {
+        controls.enableDamping = true
+    }
+
     // Threejs loop
     const clock = new THREE.Clock()
     const tick = () => {
         const elapsedTime = clock.getElapsedTime()
 
         // Animation (for testing purpose)
-        earthGroup.rotation.y = elapsedTime * .3
-        cloudsMesh.rotation.y = elapsedTime * .005
+        // earthGroup.rotation.y = elapsedTime * .3
+        cloudsMesh.rotation.y = elapsedTime * .01
+        ringMesh.rotation.y = - elapsedTime * .1
+            
+        // Update controls (for testing)
+        if(controls) {
+            controls.update()
+        }
 
         renderer.render(scene, camera)
         window.requestAnimationFrame(tick)
@@ -91,6 +132,39 @@ onMounted(() => {
     resizeHandler()
     window.addEventListener('resize', resizeHandler)
 })
+
+function getRingTexture(text, params) {
+    // Create canvas
+    let textMargin = 100
+    let textureWidth = 2048 * 2
+    let textureRatio = Math.PI * 2 * params.radius / params.height
+    let canvas = document.createElement('canvas')
+    canvas.width = textureWidth
+    canvas.height = canvas.width / textureRatio
+
+    // Init context
+    let ctx = canvas.getContext('2d')
+    ctx.textBaseline = 'middle'
+    ctx.font = `${canvas.height}px ringFont`
+
+    // Calculate repetitions
+    let textWidth = ctx.measureText(text).width + textMargin
+    let repetitions = Math.floor(textureWidth / textWidth)
+
+    // Draw text
+    for(let i = 0; i < repetitions; i++) {
+        let x = canvas.width * i / repetitions
+        ctx.fillStyle = 'white'
+        ctx.fillText(text, x, canvas.height / 2)
+    }
+
+    // Create texture from canvas
+    let texture = new THREE.Texture(canvas)
+    texture.needsUpdate = true
+
+    return texture 
+}
+
 </script>
 
 <template>
@@ -104,7 +178,7 @@ onMounted(() => {
         top: 0;
         bottom: 0;
         right: 0;
-        z-index: -1;
+        z-index: 2;
         width: 100vw;
         height: 100vh;
         object-fit: contain;
