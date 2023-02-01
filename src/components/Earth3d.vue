@@ -8,7 +8,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 const CONFIG = {
     enableOrbit: false,
-    maxCameraPan: .5,
+    maxCameraPan: .7,
+    cameraMouseSpeed: .4,
     cameraZ: 2.4,
     ring: {
         radius: 1.6,
@@ -200,8 +201,12 @@ async function initScene() {
     // Event: Mouse mouve
     const mouseMoveHandler = (e) => 
     {
-        camera.position.x = (e.clientX / window.innerWidth) / 2 * CONFIG.maxCameraPan
-        camera.position.y = - (e.clientY / window.innerHeight) / 2 * CONFIG.maxCameraPan
+        gsap.to(camera.position, {
+            duration: CONFIG.cameraMouseSpeed,
+            x: (e.clientX / window.innerWidth) / 2 * CONFIG.maxCameraPan,
+            y: - (e.clientY / window.innerHeight) / 2 * CONFIG.maxCameraPan,
+            ease: "power2.out"
+        })
     }
     window.addEventListener('mousemove', mouseMoveHandler)
 }

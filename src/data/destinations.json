@@ -15,6 +15,11 @@
     "long": 5.048
   },
   {
+    "title": "Antarctique",
+    "lat": -75.250973,
+    "long": -0.071389
+  },
+  {
     "title": "Bruxelles",
     "lat": 50.85045,
     "long": 4.34878
@@ -28,5 +33,10 @@
     "title": "Tokyo",
     "lat": 35.689487,
     "long": 139.691706
+  },
+  {
+    "title": "New York",
+    "lat": 40.712784,
+    "long": -74.005941
   }
 ]
