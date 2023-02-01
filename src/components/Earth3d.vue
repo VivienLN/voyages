@@ -25,7 +25,15 @@ const props = defineProps({
     title: {
         type: String,
         required: true
-    }
+    },
+    lat: {
+        type: Number,
+        required: true
+    },
+    long: {
+        type: Number,
+        required: true
+    },
 })
 
 // ThreeJS global variables/const
@@ -106,11 +114,6 @@ async function initScene() {
     earthGroup.add(earthMesh)
     scene.add(earthGroup)
 
-    // Move earth so that gps position faces camera (only the earth moves)
-    // earthGroup.rotation.x = CONFIG.gps.latitude * Math.PI / 180
-    earthGroup.rotation.x = (CONFIG.gps.latitude + CONFIG.gps.latitudeOffset) * Math.PI / 180
-    earthGroup.rotation.y = (-CONFIG.gps.longitude + CONFIG.gps.longitudeOffset) * Math.PI / 180
-
     // Camera
     const camera = new THREE.PerspectiveCamera(75)
     camera.position.z = CONFIG.cameraZ
@@ -129,6 +132,7 @@ async function initScene() {
     // We do it at the end to chose which objects we want globally
     threeObjects.camera = camera
     threeObjects.ringMaterial = ringMaterial
+    threeObjects.earthGroup = earthGroup
 
     // Controls (for debugging)
     const controls = CONFIG.enableOrbit ? new OrbitControls(camera, canvas) : null
@@ -187,6 +191,10 @@ function updateScene() {
     // Update ring texture
     threeObjects.ringMaterial.map = getRingTexture(props.title.toUpperCase(), CONFIG.ring)
     threeObjects.ringMaterial.needsUpdate = true
+
+    // Move earth so that gps position faces camera (only the earth moves)
+    threeObjects.earthGroup.rotation.x = (props.lat + CONFIG.gps.latitudeOffset) * Math.PI / 180
+    threeObjects.earthGroup.rotation.y = (-props.long + CONFIG.gps.longitudeOffset) * Math.PI / 180
 }
 
 function getRingTexture(text, params) {

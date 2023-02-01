@@ -1,0 +1,32 @@
+[
+  {
+    "title": "Copenhague",
+    "lat": 55.676098,
+    "long": 12.568337
+  },
+  {
+    "title": "Nîmes",
+    "lat": 43.837883,
+    "long": 4.360054
+  },
+  {
+    "title": "Efteling",
+    "lat": 51.648,
+    "long": 5.048
+  },
+  {
+    "title": "Bruxelles",
+    "lat": 50.85045,
+    "long": 4.34878
+  },
+  {
+    "title": "Sao Paulo",
+    "lat": -23.55052,
+    "long": -46.633309
+  },
+  {
+    "title": "Tokyo",
+    "lat": 35.689487,
+    "long": 139.691706
+  }
+]
