@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, onBeforeUpdate, ref } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
@@ -7,6 +7,10 @@ const CONFIG = {
     enableOrbit: false,
     maxCameraPan: .5,
     cameraZ: 2.8,
+    ring: {
+        radius: 1.6,
+        height: .3,
+    },
     gps: {
         latitude: 48.85655595428851,
         longitude: 2.352021668887112, 
@@ -17,18 +21,35 @@ const CONFIG = {
     }
 }
 
-onMounted(async () => {
+const props = defineProps({
+    title: {
+        type: String,
+        required: true
+    }
+})
+
+// ThreeJS global variables/const
+const threeCanvas = ref(null)
+const threeObjects = {}
+
+// Mounted: init
+onMounted(initScene)
+
+// Update : update scene according to props
+onBeforeUpdate(updateScene)
+
+async function initScene() {
     // Load font
     var ringFont = new FontFace('ringFont', 'url(https://fonts.gstatic.com/s/jost/v14/92zPtBhPNqw79Ij1E865zBUv7mwKIjVBNIg.woff2)');
     await ringFont.load()
     document.fonts.add(ringFont);
     
     // Threejs setup
-    const canvas = document.querySelector('canvas')
+    const canvas = threeCanvas.value
     const scene = new THREE.Scene()
     const renderer = new THREE.WebGLRenderer({
-        canvas: canvas,
-        alpha: true
+        alpha: true,
+        canvas: canvas
     })
     
     // Textures and loading
@@ -70,14 +91,11 @@ onMounted(async () => {
     const cloudsMesh = new THREE.Mesh(new THREE.SphereGeometry(1.02, 32, 32), cloudsMaterial)
 
     // Ring
-    const ringParams = {
-        radius: 1.6,
-        height: .3,
-    }
-    const ringTexture = getRingTexture("Lorem ipsum".toUpperCase(), ringParams)
-    const ringGeometry = new THREE.CylinderGeometry(ringParams.radius, ringParams.radius, ringParams.height, 64, 1, true)
+    var ringTexture = getRingTexture(props.title.toUpperCase(), CONFIG.ring)
+    const ringGeometry = new THREE.CylinderGeometry(CONFIG.ring.radius, CONFIG.ring.radius, CONFIG.ring.height, 64, 1, true)
     const ringMaterial = new THREE.MeshToonMaterial({map: ringTexture, color: 0xffffff, transparent: true, opacity: .9})
     ringMaterial.side = THREE.DoubleSide
+    ringMaterial.needsUpdate = true
     const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial)
     ringMesh.rotation.x = .09
     scene.add(ringMesh)
@@ -107,6 +125,11 @@ onMounted(async () => {
     pointLight.position.set(-1, 1, 3)
     scene.add(pointLight)
 
+    // Add references to objects into global scope
+    // We do it at the end to chose which objects we want globally
+    threeObjects.camera = camera
+    threeObjects.ringMaterial = ringMaterial
+
     // Controls (for debugging)
     const controls = CONFIG.enableOrbit ? new OrbitControls(camera, canvas) : null
     if(controls) {
@@ -124,6 +147,8 @@ onMounted(async () => {
         ringMesh.rotation.y = - elapsedTime * .1
         camera.lookAt(earthGroup.position)
         camera.rotation.z = - Math.PI * 2 / 24
+
+        // Update stuff according to vue props
             
         // Update controls (for testing)
         if(controls) {
@@ -135,9 +160,9 @@ onMounted(async () => {
     }
     tick()
 
-    // Resize handler
-    const resizeHandler = () =>
-    {
+    // Event: resize
+    const resizeHandler = () => {
+        console.log("resize")
         let w = canvas.clientWidth
         let h = canvas.clientHeight
         camera.aspect = w / h
@@ -149,14 +174,20 @@ onMounted(async () => {
     resizeHandler()
     window.addEventListener('resize', resizeHandler)
 
-    // Mouse mouve handler
+    // Event: Mouse mouve
     const mouseMoveHandler = (e) => 
     {
         camera.position.x = (e.clientX / window.innerWidth) / 2 * CONFIG.maxCameraPan
         camera.position.y = - (e.clientY / window.innerHeight) / 2 * CONFIG.maxCameraPan
     }
     window.addEventListener('mousemove', mouseMoveHandler)
-})
+}
+
+function updateScene() {
+    // Update ring texture
+    threeObjects.ringMaterial.map = getRingTexture(props.title.toUpperCase(), CONFIG.ring)
+    threeObjects.ringMaterial.needsUpdate = true
+}
 
 function getRingTexture(text, params) {
     // Create canvas
@@ -193,7 +224,7 @@ function getRingTexture(text, params) {
 </script>
 
 <template>
-    <canvas></canvas>
+    <canvas ref="threeCanvas"></canvas>
 </template>
 
 <style scoped>
@@ -203,7 +234,7 @@ function getRingTexture(text, params) {
         top: 0;
         bottom: 0;
         right: 0;
-        z-index: 2;
+        z-index: -2;
         width: 100vw;
         height: 100vh;
         object-fit: contain;
