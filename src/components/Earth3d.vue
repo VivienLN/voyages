@@ -13,6 +13,10 @@ const CONFIG = {
     ring: {
         radius: 1.6,
         height: .22,
+        color: 0xffe4aa,
+    },
+    clouds: {
+        color: 0xffe4af,
     },
     gps: {
         // Texture can be offset from the 0 latitude/longitude
@@ -22,8 +26,8 @@ const CONFIG = {
     },
     transition: {
         earthRotationDuration: .6,
-        earthScaleDuration: .8,
-        earthScaleValue: .94,
+        cameraDuration: 1,
+        cameraZ: .2,
         ringRotationDuration: .8,
         ringScaleValue: { x: 1.08, z: 1.08, y: .8 },
         ringScaleDuration: .8,
@@ -100,7 +104,7 @@ async function initScene() {
 
     // Clouds
     const cloudsTexture = textureLoader.load('src/assets/earth3d/textures/clouds.jpg')
-    const cloudsMaterial = new THREE.MeshToonMaterial({color: 0xffe4af, transparent: true, opacity: .9})
+    const cloudsMaterial = new THREE.MeshToonMaterial({color: CONFIG.clouds.color, transparent: true, opacity: .9})
     cloudsMaterial.alphaMap = cloudsTexture
     cloudsMaterial.metalness = 0
     cloudsMaterial.roughness = .6
@@ -109,7 +113,7 @@ async function initScene() {
 
     // Ring
     const ringGeometry = new THREE.CylinderGeometry(CONFIG.ring.radius, CONFIG.ring.radius, CONFIG.ring.height, 64, 1, true)
-    const ringMaterial = new THREE.MeshToonMaterial({color: 0xffc488, transparent: true, opacity: .9})
+    const ringMaterial = new THREE.MeshToonMaterial({color: CONFIG.ring.color, transparent: true, opacity: .9})
     ringMaterial.side = THREE.DoubleSide
     ringMaterial.needsUpdate = true
     const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial)
@@ -218,22 +222,19 @@ function updateScene() {
         y: targetY,
         ease: "power2.inOut",
     })
-    // Scale earth during transition
-    let earthScaleTl = gsap.timeline();
-    duration = CONFIG.transition.earthScaleDuration
-    earthScaleTl
-        .to(threeObjects.earthGroup.scale, {
-            duration: duration / 2,
-            x: CONFIG.transition.earthScaleValue,
-            y: CONFIG.transition.earthScaleValue,
-            z: CONFIG.transition.earthScaleValue,
-            ease: "power1.inOut",
-        }).to(threeObjects.earthGroup.scale, {
-            duration: duration / 2,
-            x: 1,
-            y: 1,
-            z: 1,
-            ease: "power1.inOut",
+
+    // Move camera during transition
+    let cameraTl = gsap.timeline();
+    duration = .8
+    cameraTl
+        .to(threeObjects.camera.position, {
+            duration: CONFIG.transition.cameraDuration / 3,
+            z: CONFIG.cameraZ + CONFIG.transition.cameraZ,
+            ease: "sine.inOut",
+        }).to(threeObjects.camera.position, {
+            duration: CONFIG.transition.cameraDuration / 3 * 2,
+            z: CONFIG.cameraZ,
+            ease: "sine.inOut",
         })
 
     // Move ring to hide transition
