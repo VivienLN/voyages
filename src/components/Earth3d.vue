@@ -7,7 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 const CONFIG = {
     enableOrbit: false,
     maxCameraPan: .5,
-    cameraZ: 2.8,
+    cameraZ: 2.5,
     ring: {
         radius: 1.6,
         height: .3,
@@ -17,6 +17,12 @@ const CONFIG = {
         // And we want an additional offset because we dont want the GPS target to be at the *center*
         latitudeOffset: 0 - 18,
         longitudeOffset: -90 - 12,
+    },
+    transition: {
+        earthRotationDuration: .6,
+        ringRotationDuration: .8,
+        ringScaleValue: { x: 1.08, z: 1.08, y: .8 },
+        ringScaleDuration: .8,
     }
 }
 
@@ -98,14 +104,16 @@ async function initScene() {
     const cloudsMesh = new THREE.Mesh(new THREE.SphereGeometry(1.02, 32, 32), cloudsMaterial)
 
     // Ring
-    var ringTexture = getRingTexture(props.title.toUpperCase(), CONFIG.ring)
     const ringGeometry = new THREE.CylinderGeometry(CONFIG.ring.radius, CONFIG.ring.radius, CONFIG.ring.height, 64, 1, true)
-    const ringMaterial = new THREE.MeshToonMaterial({map: ringTexture, color: 0xffffff, transparent: true, opacity: .9})
+    const ringMaterial = new THREE.MeshToonMaterial({color: 0xffc488, transparent: true, opacity: .9})
     ringMaterial.side = THREE.DoubleSide
     ringMaterial.needsUpdate = true
     const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial)
-    ringMesh.rotation.x = .09
-    scene.add(ringMesh)
+    // To hold transition animations independently from ringMesh rotation
+    const ringGroup = new THREE.Group()
+    ringGroup.rotation.x = .09
+    ringGroup.add(ringMesh)
+    scene.add(ringGroup)
 
     // Earth group
     const earthGroup = new THREE.Group()
@@ -127,17 +135,21 @@ async function initScene() {
     pointLight.position.set(-1, 1, 3)
     scene.add(pointLight)
 
-    // Add references to objects into global scope
-    // We do it at the end to chose which objects we want globally
-    threeObjects.camera = camera
-    threeObjects.ringMaterial = ringMaterial
-    threeObjects.earthGroup = earthGroup
-
     // Controls (for debugging)
     const controls = CONFIG.enableOrbit ? new OrbitControls(camera, canvas) : null
     if(controls) {
         controls.enableDamping = true
     }
+
+    // Add references to objects into global scope
+    // We do it at the end to chose which objects we want globally
+    threeObjects.camera = camera
+    threeObjects.ringMaterial = ringMaterial
+    threeObjects.ringGroup = ringGroup
+    threeObjects.earthGroup = earthGroup
+
+    // Force first update to show the right values
+    updateScene()
 
     // Threejs loop
     const clock = new THREE.Clock()
@@ -146,12 +158,10 @@ async function initScene() {
 
         // Animation (for testing purpose)
         // earthGroup.rotation.y = elapsedTime * .3
-        cloudsMesh.rotation.y = elapsedTime * .01
-        ringMesh.rotation.y = - elapsedTime * .1
+        cloudsMesh.rotation.y = elapsedTime * .014
+        ringMesh.rotation.y = - elapsedTime * .18
         camera.lookAt(earthGroup.position)
         camera.rotation.z = - Math.PI * 2 / 24
-
-        // Update stuff according to vue props
             
         // Update controls (for testing)
         if(controls) {
@@ -187,18 +197,52 @@ async function initScene() {
 }
 
 function updateScene() {
+    console.log("updateScene")
     // Update ring texture
     threeObjects.ringMaterial.map = getRingTexture(props.title.toUpperCase(), CONFIG.ring)
     threeObjects.ringMaterial.needsUpdate = true
 
     // Move earth so that gps position faces camera (only the earth moves)
-    threeObjects.earthGroup.rotation.x = (props.lat + CONFIG.gps.latitudeOffset) * Math.PI / 180
-    threeObjects.earthGroup.rotation.y = (-props.long + CONFIG.gps.longitudeOffset) * Math.PI / 180
+    let duration = CONFIG.transition.earthRotationDuration
+    let targetX = (props.lat + CONFIG.gps.latitudeOffset) * Math.PI / 180
+    let targetY = (-props.long + CONFIG.gps.longitudeOffset) * Math.PI / 180
+    gsap.to(threeObjects.earthGroup.rotation, { 
+        duration: duration,
+        x: targetX,
+        y: targetY,
+        ease: "power2.inOut",
+    })
+    // Move ring to hide transition
+    duration = CONFIG.transition.ringRotationDuration
+    gsap.fromTo(threeObjects.ringGroup.rotation, {
+        y: 0,
+    }, {
+        duration: duration,
+        y: -Math.PI * 2 * 1,
+        ease: "circ.out",
+    })
+    // Deform ring
+    let ringScaleTl = gsap.timeline(); //create the timeline
+    duration = CONFIG.transition.ringScaleDuration
+    ringScaleTl
+        .to(threeObjects.ringGroup.scale, {
+            duration: duration / 3,
+            x: CONFIG.transition.ringScaleValue.x,
+            y: CONFIG.transition.ringScaleValue.y,
+            z: CONFIG.transition.ringScaleValue.z,
+            ease: "power2.out",
+        }).to(threeObjects.ringGroup.scale, {
+            duration: duration / 3 * 2,
+            x: 1,
+            y: 1,
+            z: 1,
+            ease: "power2.out",
+        })
 }
 
 function getRingTexture(text, params) {
     // Create canvas
-    let textMargin = 60
+    let textMargin = 80
     let textureWidth = 2048 * 2
     let textureRatio = Math.PI * 2 * params.radius / params.height
     let canvas = document.createElement('canvas')
