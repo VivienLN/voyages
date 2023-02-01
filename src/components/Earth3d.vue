@@ -2,15 +2,17 @@
 import { onMounted, onBeforeUpdate, ref } from 'vue'
 import * as THREE from 'three'
 import gsap from "gsap"
+import { CustomEase } from "gsap/CustomEase"
+gsap.registerPlugin(CustomEase)
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 const CONFIG = {
     enableOrbit: false,
     maxCameraPan: .5,
-    cameraZ: 2.5,
+    cameraZ: 2.4,
     ring: {
         radius: 1.6,
-        height: .3,
+        height: .22,
     },
     gps: {
         // Texture can be offset from the 0 latitude/longitude
@@ -20,6 +22,8 @@ const CONFIG = {
     },
     transition: {
         earthRotationDuration: .6,
+        earthScaleDuration: .8,
+        earthScaleValue: .94,
         ringRotationDuration: .8,
         ringScaleValue: { x: 1.08, z: 1.08, y: .8 },
         ringScaleDuration: .8,
@@ -157,11 +161,13 @@ async function initScene() {
         const elapsedTime = clock.getElapsedTime()
 
         // Animation (for testing purpose)
-        // earthGroup.rotation.y = elapsedTime * .3
         cloudsMesh.rotation.y = elapsedTime * .014
         ringMesh.rotation.y = - elapsedTime * .18
         camera.lookAt(earthGroup.position)
         camera.rotation.z = - Math.PI * 2 / 24
+
+        // Flikering ring
+        ringMaterial.opacity = .9 + Math.sin(elapsedTime * 2) * .1
             
         // Update controls (for testing)
         if(controls) {
@@ -212,6 +218,24 @@ function updateScene() {
         y: targetY,
         ease: "power2.inOut",
     })
+    // Scale earth during transition
+    let earthScaleTl = gsap.timeline();
+    duration = CONFIG.transition.earthScaleDuration
+    earthScaleTl
+        .to(threeObjects.earthGroup.scale, {
+            duration: duration / 2,
+            x: CONFIG.transition.earthScaleValue,
+            y: CONFIG.transition.earthScaleValue,
+            z: CONFIG.transition.earthScaleValue,
+            ease: "power1.inOut",
+        }).to(threeObjects.earthGroup.scale, {
+            duration: duration / 2,
+            x: 1,
+            y: 1,
+            z: 1,
+            ease: "power1.inOut",
+        })
+
     // Move ring to hide transition
     duration = CONFIG.transition.ringRotationDuration
     gsap.fromTo(threeObjects.ringGroup.rotation, {
@@ -219,10 +243,10 @@ function updateScene() {
     }, {
         duration: duration,
         y: -Math.PI * 2 * 1,
-        ease: "circ.out",
+        ease: "power3.out",
     })
     // Deform ring
-    let ringScaleTl = gsap.timeline(); //create the timeline
+    let ringScaleTl = gsap.timeline();
     duration = CONFIG.transition.ringScaleDuration
     ringScaleTl
         .to(threeObjects.ringGroup.scale, {
