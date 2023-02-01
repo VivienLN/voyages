@@ -13,8 +13,6 @@ const CONFIG = {
         height: .3,
     },
     gps: {
-        latitude: 48.85655595428851,
-        longitude: 2.352021668887112, 
         // Texture can be offset from the 0 latitude/longitude
         // And we want an additional offset because we dont want the GPS target to be at the *center*
         latitudeOffset: 0 - 18,

@@ -4,11 +4,11 @@
   import { reactive, ref } from 'vue'
 
   const state = reactive({
-    current: {
-      title: "foo"
-    }
+    current: {}
   })
   const index = ref(0)
+
+  updateCurrent()
 
   function previous() {
     let target = index.value - 1
