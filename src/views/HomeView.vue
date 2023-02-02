@@ -30,8 +30,8 @@
 <template>
   <main>
     {{ destinations.length }}
+    <Earth3d v-bind="state.current" />
     <button @click="previous">Précédent</button>
     <button @click="next">Suivant</button>
-    <Earth3d v-bind="state.current" />
   </main>
 </template>

@@ -7,11 +7,18 @@ gsap.registerPlugin(CustomEase)
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 const CONFIG = {
+    enableGui: false,
     enableOrbit: false,
     maxCameraPan: .1,
     cameraMouseSpeed: .4,
     cameraZ: 2.3,
     ringTextureResolution: 2048 * 2 * 2,
+    atmosphere: {
+        c: 1,
+        p: 8,
+        alpha: .5,
+        scale: 1.06,
+    },
     ringTitle: {
         radius: 1.5,
         height: .22,
@@ -19,7 +26,7 @@ const CONFIG = {
         color: 0xffe4aa,
     },
     ringDesc: {
-        radius: 1.5,
+        radius: 1.54,
         height: .06,
         y: -.06,
         color: 0xffcdcd,
@@ -85,6 +92,7 @@ async function initScene() {
     // Threejs setup
     const canvas = threeCanvas.value
     const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0x132b3a)
     const renderer = new THREE.WebGLRenderer({
         alpha: true,
         canvas: canvas
@@ -101,6 +109,12 @@ async function initScene() {
         console.log("Textures loaded!")
     }
 
+    // Camera
+    const camera = new THREE.PerspectiveCamera(75)
+    camera.position.z = CONFIG.cameraZ
+    camera.rotation.z = - Math.PI * 2 / 24
+    scene.add(camera)
+
     // Earth
     const earthMaterial = new THREE.MeshToonMaterial()
     earthMaterial.map = textureLoader.load('src/assets/earth3d/textures/earthmap.jpg')
@@ -116,14 +130,69 @@ async function initScene() {
     earthMaterial.gradientMap = gradientMap
     const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), earthMaterial)
 
+    // Custom shader for earth glow
+    // thanks to https://github.com/stemkoski/stemkoski.github.com/blob/master/Three.js/Shader-Glow.html
+    const atmoMaterial = new THREE.ShaderMaterial({
+	    uniforms: 
+		{ 
+			"c":   { type: "f", value: CONFIG.atmosphere.c },
+			"p":   { type: "f", value: CONFIG.atmosphere.p },
+			"alpha":   { type: "f", value: CONFIG.atmosphere.alpha },
+			glowColor: { type: "c", value: new THREE.Color(0x7777ff) },
+			viewVector: { type: "v3", value: camera.position }
+		},
+		vertexShader: `
+            uniform vec3 viewVector;
+            uniform float c;
+            uniform float p;
+            varying float intensity;
+            void main() 
+            {
+                vec3 vNormal = normalize( normalMatrix * normal );
+                vec3 vNormel = normalize( normalMatrix * viewVector );
+                intensity = pow( c - dot(vNormal, vNormel), p );
+
+                gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+            }
+        `,
+		fragmentShader: `
+            uniform vec3 glowColor;
+            uniform float alpha;
+            varying float intensity;
+            void main() 
+            {
+                vec3 glow = glowColor * intensity;
+                gl_FragColor = vec4( glow, alpha );
+            }
+        `,
+		side: THREE.BackSide,
+		blending: THREE.AdditiveBlending,
+		transparent: true,
+        depthWrite: false
+	});
+    const atmoMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 64), atmoMaterial)
+    atmoMesh.scale.multiplyScalar(CONFIG.atmosphere.scale)
+    scene.add(atmoMesh)
+
     // Clouds
     const cloudsTexture = textureLoader.load('src/assets/earth3d/textures/clouds.jpg')
-    const cloudsMaterial = new THREE.MeshToonMaterial({color: CONFIG.clouds.color, transparent: true, opacity: 1})
+    const cloudsMaterial = new THREE.MeshToonMaterial({
+        color: CONFIG.clouds.color, 
+        transparent: true, 
+        opacity: 1,
+        depthWrite: false
+    })
     cloudsMaterial.alphaMap = cloudsTexture
     cloudsMaterial.metalness = 0
     cloudsMaterial.roughness = .6
     cloudsMaterial.gradientMap = gradientMap
     const cloudsMesh = new THREE.Mesh(new THREE.SphereGeometry(1.02, 32, 32), cloudsMaterial)
+
+    // Earth group
+    const earthGroup = new THREE.Group()
+    earthGroup.add(cloudsMesh)
+    earthGroup.add(earthMesh)
+    scene.add(earthGroup)
 
     // Ring title
     let conf = CONFIG.ringTitle
@@ -158,18 +227,6 @@ async function initScene() {
     ringsGroup.add(ringTitleGroup)
     ringsGroup.add(ringDescGroup)
     scene.add(ringsGroup)
-
-    // Earth group
-    const earthGroup = new THREE.Group()
-    earthGroup.add(cloudsMesh)
-    earthGroup.add(earthMesh)
-    scene.add(earthGroup)
-
-    // Camera
-    const camera = new THREE.PerspectiveCamera(75)
-    camera.position.z = CONFIG.cameraZ
-    camera.rotation.z = - Math.PI * 2 / 24
-    scene.add(camera)
 
     // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.01)
@@ -207,16 +264,21 @@ async function initScene() {
         cloudsMesh.rotation.y = elapsedTime * .014
         ringTitleMesh.rotation.y = - elapsedTime * .2
         ringDescMesh.rotation.y = - elapsedTime * .06
-        camera.lookAt(earthGroup.position)
-        camera.rotation.z = - Math.PI * 2 / 24
+
+        // Camera
+        if(!CONFIG.enableOrbit) {
+            camera.lookAt(earthGroup.position)
+            camera.rotation.z = - Math.PI * 2 / 24
+        } else {
+            controls.update()
+        }
+
+        // Update atmo shader to always face camera
+        // atmoMaterial.uniforms.viewVector.value = camera.position
+        atmoMaterial.uniforms.viewVector.value = new THREE.Vector3().subVectors( camera.position, atmoMesh.position )
 
         // Flikering ring
         ringTitleMaterial.opacity = .9 + Math.sin(elapsedTime * 2) * .1
-            
-        // Update controls (for testing)
-        if(controls) {
-            controls.update()
-        }
 
         renderer.render(scene, camera)
         window.requestAnimationFrame(tick)
@@ -225,7 +287,6 @@ async function initScene() {
 
     // Event: resize
     const resizeHandler = () => {
-        console.log("resize")
         let w = canvas.clientWidth
         let h = canvas.clientHeight
         camera.aspect = w / h
@@ -240,7 +301,6 @@ async function initScene() {
     // Event: Mouse mouve
     const mouseMoveHandler = (e) => 
     {
-        console.log((1 - (e.clientY / window.innerHeight) * 2))
         gsap.to(camera.position, {
             duration: CONFIG.cameraMouseSpeed,
             x: (- .5 + (e.clientX / window.innerWidth)) * CONFIG.maxCameraPan,
@@ -248,7 +308,9 @@ async function initScene() {
             ease: "power2.out"
         })
     }
-    window.addEventListener('mousemove', mouseMoveHandler)
+    if(!CONFIG.enableOrbit) {
+        window.addEventListener('mousemove', mouseMoveHandler)
+    }
 }
 
 function updateScene() {
@@ -369,7 +431,7 @@ function getRingTexture(text, params) {
         top: 0;
         bottom: 0;
         right: 0;
-        z-index: -2;
+        /* z-index: 0; */
         width: 100vw;
         height: 100vh;
         object-fit: contain;
