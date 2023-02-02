@@ -5,34 +5,45 @@ import gsap from "gsap"
 import { CustomEase } from "gsap/CustomEase"
 gsap.registerPlugin(CustomEase)
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import * as dat from 'lil-gui'
 
 const CONFIG = {
-    enableGui: false,
+    debug: window && window.location.hash === '#debug',
     enableOrbit: false,
     maxCameraPan: .1,
     cameraMouseSpeed: .4,
     cameraZ: 2.3,
     ringTextureResolution: 2048 * 2 * 2,
+    backgroundColor: 0x132b3a,
     atmosphere: {
-        c: 1,
-        p: 8,
-        alpha: .5,
-        scale: 1.06,
+        c: 1.08,
+        p: 14,
+        alpha: .6,
+        scale: 1.08,
     },
     ringTitle: {
         radius: 1.5,
         height: .22,
         y: .06,
         color: 0xffe4aa,
+        rotationSpeed: .2,
     },
     ringDesc: {
         radius: 1.54,
         height: .06,
         y: -.06,
         color: 0xffcdcd,
+        rotationSpeed: .06,
     },
     clouds: {
         color: 0xffe4af,
+    },
+    visibility: {
+        earth: true,
+        clouds: true,
+        atmosphere: true,
+        ringTitle: true,
+        ringDesc: true,
     },
     gps: {
         // Texture can be offset from the 0 latitude/longitude
@@ -84,6 +95,10 @@ onMounted(initScene)
 onBeforeUpdate(updateScene)
 
 async function initScene() {
+    // ===================================
+    // Setup & Loading
+    // ===================================
+
     // Load font
     var ringFont = new FontFace('ringFont', 'url(https://fonts.gstatic.com/s/jost/v14/92zPtBhPNqw79Ij1E865zBUv7mwKIjVBNIg.woff2)');
     await ringFont.load()
@@ -92,7 +107,7 @@ async function initScene() {
     // Threejs setup
     const canvas = threeCanvas.value
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x132b3a)
+    scene.background = new THREE.Color(CONFIG.backgroundColor)
     const renderer = new THREE.WebGLRenderer({
         alpha: true,
         canvas: canvas
@@ -109,11 +124,20 @@ async function initScene() {
         console.log("Textures loaded!")
     }
 
+
+    // ===================================
     // Camera
+    // ===================================
+
     const camera = new THREE.PerspectiveCamera(75)
     camera.position.z = CONFIG.cameraZ
     camera.rotation.z = - Math.PI * 2 / 24
     scene.add(camera)
+
+
+    // ===================================
+    // Earth (with clouds and atmosphere)
+    // ===================================
 
     // Earth
     const earthMaterial = new THREE.MeshToonMaterial()
@@ -130,7 +154,7 @@ async function initScene() {
     earthMaterial.gradientMap = gradientMap
     const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), earthMaterial)
 
-    // Custom shader for earth glow
+    // Custom shader for earth atmosphere
     // thanks to https://github.com/stemkoski/stemkoski.github.com/blob/master/Three.js/Shader-Glow.html
     const atmoMaterial = new THREE.ShaderMaterial({
 	    uniforms: 
@@ -171,7 +195,6 @@ async function initScene() {
         depthWrite: false
 	});
     const atmoMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 64), atmoMaterial)
-    atmoMesh.scale.multiplyScalar(CONFIG.atmosphere.scale)
     scene.add(atmoMesh)
 
     // Clouds
@@ -194,6 +217,11 @@ async function initScene() {
     earthGroup.add(earthMesh)
     scene.add(earthGroup)
 
+
+    // ===================================
+    // Rings
+    // ===================================
+
     // Ring title
     let conf = CONFIG.ringTitle
     const ringTitleGeometry = new THREE.CylinderGeometry(conf.radius, conf.radius, conf.height, 64, 1, true)
@@ -205,7 +233,6 @@ async function initScene() {
     const ringTitleMesh = new THREE.Mesh(ringTitleGeometry, ringTitleMaterial)
     // To hold transition animations independently from ringTitleMesh rotation
     const ringTitleGroup = new THREE.Group()
-    ringTitleGroup.position.y = conf.y
     ringTitleGroup.add(ringTitleMesh)
 
     // Ring desc
@@ -218,7 +245,6 @@ async function initScene() {
     const ringDescMesh = new THREE.Mesh(ringDescGeometry, ringDescMaterial)
     // To hold transition animations independently from ringDescMesh rotation
     const ringDescGroup = new THREE.Group()
-    ringDescGroup.position.y = conf.y
     ringDescGroup.add(ringDescMesh)
 
     // Ring group
@@ -228,7 +254,11 @@ async function initScene() {
     ringsGroup.add(ringDescGroup)
     scene.add(ringsGroup)
 
+
+    // ===================================
     // Lights
+    // ===================================
+
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.01)
     scene.add(ambientLight)
 
@@ -236,14 +266,12 @@ async function initScene() {
     pointLight.position.set(-1, 1, 3)
     scene.add(pointLight)
 
-    // Controls (for debugging)
-    const controls = CONFIG.enableOrbit ? new OrbitControls(camera, canvas) : null
-    if(controls) {
-        controls.enableDamping = true
-    }
 
+    // ===================================
     // Add references to objects into global scope
     // We do it at the end to chose which objects we want globally
+    // ===================================
+
     threeObjects.camera = camera
     threeObjects.earthGroup = earthGroup
     threeObjects.ringTitleMaterial = ringTitleMaterial
@@ -252,21 +280,44 @@ async function initScene() {
     threeObjects.ringDescGroup = ringDescGroup
     threeObjects.ringsGroup = ringsGroup
 
+
+    // ===================================
     // Force first update to show the right values
+    // ===================================
+
     updateScene()
 
+
+    // ===================================
+    // Orbit controls (only available in debug mode)
+    // ===================================
+
+    const controls = new OrbitControls(camera, canvas)
+    controls.enableDamping = true
+    controls.enabled = false
+
+
+    // ===================================
     // Threejs loop
+    // ===================================
+
     const clock = new THREE.Clock()
     const tick = () => {
         const elapsedTime = clock.getElapsedTime()
 
-        // Animation (for testing purpose)
+        // Animation
         cloudsMesh.rotation.y = elapsedTime * .014
-        ringTitleMesh.rotation.y = - elapsedTime * .2
-        ringDescMesh.rotation.y = - elapsedTime * .06
+
+        // Rings params
+        ringTitleGroup.position.y = CONFIG.ringTitle.y
+        ringTitleMesh.rotation.y = - elapsedTime * CONFIG.ringTitle.rotationSpeed
+        ringTitleMaterial.opacity = .9 + Math.sin(elapsedTime * 2) * .1
+        ringDescGroup.position.y = CONFIG.ringDesc.y
+        ringDescMesh.rotation.y = - elapsedTime * CONFIG.ringDesc.rotationSpeed
 
         // Camera
-        if(!CONFIG.enableOrbit) {
+        controls.enabled = CONFIG.enableOrbit
+        if(!controls.enabled) {
             camera.lookAt(earthGroup.position)
             camera.rotation.z = - Math.PI * 2 / 24
         } else {
@@ -274,18 +325,23 @@ async function initScene() {
         }
 
         // Update atmo shader to always face camera
-        // atmoMaterial.uniforms.viewVector.value = camera.position
         atmoMaterial.uniforms.viewVector.value = new THREE.Vector3().subVectors( camera.position, atmoMesh.position )
-
-        // Flikering ring
-        ringTitleMaterial.opacity = .9 + Math.sin(elapsedTime * 2) * .1
+        // Update atmo shader and mesh to adapt to CONFIG values in real time (for debug)
+        atmoMaterial.uniforms.c.value = CONFIG.atmosphere.c
+        atmoMaterial.uniforms.p.value = CONFIG.atmosphere.p
+        atmoMaterial.uniforms.alpha.value = CONFIG.atmosphere.alpha
+        atmoMesh.scale.set(CONFIG.atmosphere.scale, CONFIG.atmosphere.scale, CONFIG.atmosphere.scale)
 
         renderer.render(scene, camera)
         window.requestAnimationFrame(tick)
     }
     tick()
 
+
+    // ===================================
     // Event: resize
+    // ===================================
+
     const resizeHandler = () => {
         let w = canvas.clientWidth
         let h = canvas.clientHeight
@@ -298,9 +354,15 @@ async function initScene() {
     resizeHandler()
     window.addEventListener('resize', resizeHandler)
 
+
+    // ===================================
     // Event: Mouse mouve
-    const mouseMoveHandler = (e) => 
-    {
+    // ===================================
+
+    const mouseMoveHandler = (e) => {
+        if(CONFIG.enableOrbit) {
+            return
+        }
         gsap.to(camera.position, {
             duration: CONFIG.cameraMouseSpeed,
             x: (- .5 + (e.clientX / window.innerWidth)) * CONFIG.maxCameraPan,
@@ -308,15 +370,74 @@ async function initScene() {
             ease: "power2.out"
         })
     }
-    if(!CONFIG.enableOrbit) {
-        window.addEventListener('mousemove', mouseMoveHandler)
+    window.addEventListener('mousemove', mouseMoveHandler)
+
+
+    // ===================================
+    // Debug (init GUI)
+    // ===================================
+    if(CONFIG.debug) {
+        console.log("Debug Mode!")
+        const gui = new dat.GUI()
+
+        let fGeneral = gui.addFolder("General")
+        fGeneral.addColor(CONFIG, 'backgroundColor').onChange(() => {
+            scene.background.set(CONFIG.backgroundColor)
+        })
+        fGeneral.add(CONFIG.visibility, "earth").onChange(() => {
+            earthMesh.visible = CONFIG.visibility.earth
+        })
+        fGeneral.add(CONFIG.visibility, "clouds").onChange(() => {            
+            cloudsMesh.visible = CONFIG.visibility.clouds
+        })
+        fGeneral.add(CONFIG.visibility, "atmosphere").onChange(() => {            
+            atmoMesh.visible = CONFIG.visibility.atmosphere
+        })
+        fGeneral.add(CONFIG.visibility, "ringTitle").onChange(() => {            
+            ringTitleMesh.visible = CONFIG.visibility.ringTitle
+        })
+        fGeneral.add(CONFIG.visibility, "ringDesc").onChange(() => {            
+            ringDescMesh.visible = CONFIG.visibility.ringDesc
+        })
+
+        let fCamera = gui.addFolder('Camera')
+        fCamera.add(CONFIG, "enableOrbit")
+
+        let fAtmo = gui.addFolder('Atmosphere & Clouds')
+        fAtmo.add(CONFIG.atmosphere, "c", 0, 3, .001)
+        fAtmo.add(CONFIG.atmosphere, "p", 0, 30, .01)
+        fAtmo.add(CONFIG.atmosphere, "alpha", 0, 1, .01)
+        fAtmo.add(CONFIG.atmosphere, "scale", 1, 2, .01)
+        fAtmo.addColor(CONFIG.clouds, 'color').name("clouds color").onChange(() => {
+            cloudsMaterial.color.set(CONFIG.clouds.color)
+            cloudsMaterial.needsUpdate = true
+        })
+
+        let fTitleRings = gui.addFolder('Ring (title)')
+        fTitleRings.add(CONFIG.ringTitle, "rotationSpeed", -5, 5, .001)
+        fTitleRings.add(CONFIG.ringTitle, "y", -5, 5, .01)
+        fTitleRings.addColor(CONFIG.ringTitle, 'color').onChange(() => {
+            ringTitleMaterial.color.set(CONFIG.ringTitle.color)
+        })
+
+        let fDescRing = gui.addFolder('Ring (description)')
+        fDescRing.add(CONFIG.ringDesc, "rotationSpeed", -5, 5, .001)
+        fDescRing.add(CONFIG.ringDesc, "y", -5, 5, .01)
+        fDescRing.addColor(CONFIG.ringDesc, 'color').onChange(() => {
+            ringDescMaterial.color.set(CONFIG.ringDesc.color)
+        })
+        
     }
 }
+
+
+// ===================================
+// Update scene when changing props
+// ===================================
 
 function updateScene() {
     console.log("updateScene")
     // Update ring textures
-    // let titleTexture = 
     let title = props.title.toUpperCase() + " " + props.year
     threeObjects.ringTitleMaterial.map = getRingTexture(title, CONFIG.ringTitle)
     let desc = props.places.join(" - ").toUpperCase()
@@ -382,6 +503,11 @@ function updateScene() {
             ease: "power2.out",
         })
 }
+
+
+// ===================================
+// Helper to get ring texture from a text
+// ===================================
 
 function getRingTexture(text, params) {
     // Create canvas
