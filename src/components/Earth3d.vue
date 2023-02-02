@@ -8,13 +8,21 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 const CONFIG = {
     enableOrbit: false,
-    maxCameraPan: .7,
+    maxCameraPan: .1,
     cameraMouseSpeed: .4,
-    cameraZ: 2.4,
-    ring: {
-        radius: 1.6,
+    cameraZ: 2.3,
+    ringTextureResolution: 2048 * 2 * 2,
+    ringTitle: {
+        radius: 1.5,
         height: .22,
+        y: .06,
         color: 0xffe4aa,
+    },
+    ringDesc: {
+        radius: 1.5,
+        height: .06,
+        y: -.06,
+        color: 0xffcdcd,
     },
     clouds: {
         color: 0xffe4af,
@@ -38,6 +46,14 @@ const CONFIG = {
 const props = defineProps({
     title: {
         type: String,
+        required: true
+    },
+    year: {
+        type: Number,
+        required: true
+    },
+    places: {
+        type: Array,
         required: true
     },
     lat: {
@@ -93,10 +109,7 @@ async function initScene() {
     earthMaterial.metalnessMap = textureLoader.load('src/assets/earth3d/textures/earthmetalness.jpg')
     earthMaterial.roughnessMap = textureLoader.load('src/assets/earth3d/textures/earthroughness.jpg')
     earthMaterial.normalMap = textureLoader.load('src/assets/earth3d/textures/earthnormal.jpg')
-    // earthMaterial.normalScale = new THREE.Vector2(.1, .1)
     earthMaterial.normalScale = new THREE.Vector2(.9, .9)
-    // earthMaterial.emissiveMap = textureLoader.load('src/assets/earth3d/textures/earthmetalness.jpg')
-    // earthMaterial.emissive = new THREE.Color(0x222222)
     let gradientMap = textureLoader.load('src/assets/earth3d/textures/gradient.jpg')
     gradientMap.minFilter = THREE.NearestFilter
     gradientMap.magFilter = THREE.NearestFilter
@@ -105,24 +118,46 @@ async function initScene() {
 
     // Clouds
     const cloudsTexture = textureLoader.load('src/assets/earth3d/textures/clouds.jpg')
-    const cloudsMaterial = new THREE.MeshToonMaterial({color: CONFIG.clouds.color, transparent: true, opacity: .9})
+    const cloudsMaterial = new THREE.MeshToonMaterial({color: CONFIG.clouds.color, transparent: true, opacity: 1})
     cloudsMaterial.alphaMap = cloudsTexture
     cloudsMaterial.metalness = 0
     cloudsMaterial.roughness = .6
     cloudsMaterial.gradientMap = gradientMap
     const cloudsMesh = new THREE.Mesh(new THREE.SphereGeometry(1.02, 32, 32), cloudsMaterial)
 
-    // Ring
-    const ringGeometry = new THREE.CylinderGeometry(CONFIG.ring.radius, CONFIG.ring.radius, CONFIG.ring.height, 64, 1, true)
-    const ringMaterial = new THREE.MeshToonMaterial({color: CONFIG.ring.color, transparent: true, opacity: .9})
-    ringMaterial.side = THREE.DoubleSide
-    ringMaterial.needsUpdate = true
-    const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial)
-    // To hold transition animations independently from ringMesh rotation
-    const ringGroup = new THREE.Group()
-    ringGroup.rotation.x = .09
-    ringGroup.add(ringMesh)
-    scene.add(ringGroup)
+    // Ring title
+    let conf = CONFIG.ringTitle
+    const ringTitleGeometry = new THREE.CylinderGeometry(conf.radius, conf.radius, conf.height, 64, 1, true)
+    // alphaTest>0 to avoid transparency issues
+    const ringTitleMaterial = new THREE.MeshToonMaterial({color: conf.color, transparent: true, alphaTest:.1})
+    ringTitleMaterial.side = THREE.DoubleSide
+    ringTitleMaterial.emissive = new THREE.Color(conf.color)
+    ringTitleMaterial.emissiveIntensity = .1
+    const ringTitleMesh = new THREE.Mesh(ringTitleGeometry, ringTitleMaterial)
+    // To hold transition animations independently from ringTitleMesh rotation
+    const ringTitleGroup = new THREE.Group()
+    ringTitleGroup.position.y = conf.y
+    ringTitleGroup.add(ringTitleMesh)
+
+    // Ring desc
+    conf = CONFIG.ringDesc
+    const ringDescGeometry = new THREE.CylinderGeometry(conf.radius, conf.radius, conf.height, 64, 1, true)
+    const ringDescMaterial = new THREE.MeshToonMaterial({color: conf.color, transparent: true, alphaTest:.1})
+    ringDescMaterial.side = THREE.DoubleSide
+    ringDescMaterial.emissive = new THREE.Color(conf.color)
+    ringDescMaterial.emissiveIntensity = .1
+    const ringDescMesh = new THREE.Mesh(ringDescGeometry, ringDescMaterial)
+    // To hold transition animations independently from ringDescMesh rotation
+    const ringDescGroup = new THREE.Group()
+    ringDescGroup.position.y = conf.y
+    ringDescGroup.add(ringDescMesh)
+
+    // Ring group
+    const ringsGroup = new THREE.Group()
+    ringsGroup.rotation.x = .16
+    ringsGroup.add(ringTitleGroup)
+    ringsGroup.add(ringDescGroup)
+    scene.add(ringsGroup)
 
     // Earth group
     const earthGroup = new THREE.Group()
@@ -153,9 +188,12 @@ async function initScene() {
     // Add references to objects into global scope
     // We do it at the end to chose which objects we want globally
     threeObjects.camera = camera
-    threeObjects.ringMaterial = ringMaterial
-    threeObjects.ringGroup = ringGroup
     threeObjects.earthGroup = earthGroup
+    threeObjects.ringTitleMaterial = ringTitleMaterial
+    threeObjects.ringTitleGroup = ringTitleGroup
+    threeObjects.ringDescMaterial = ringDescMaterial
+    threeObjects.ringDescGroup = ringDescGroup
+    threeObjects.ringsGroup = ringsGroup
 
     // Force first update to show the right values
     updateScene()
@@ -167,12 +205,13 @@ async function initScene() {
 
         // Animation (for testing purpose)
         cloudsMesh.rotation.y = elapsedTime * .014
-        ringMesh.rotation.y = - elapsedTime * .18
+        ringTitleMesh.rotation.y = - elapsedTime * .2
+        ringDescMesh.rotation.y = - elapsedTime * .06
         camera.lookAt(earthGroup.position)
         camera.rotation.z = - Math.PI * 2 / 24
 
         // Flikering ring
-        ringMaterial.opacity = .9 + Math.sin(elapsedTime * 2) * .1
+        ringTitleMaterial.opacity = .9 + Math.sin(elapsedTime * 2) * .1
             
         // Update controls (for testing)
         if(controls) {
@@ -201,10 +240,11 @@ async function initScene() {
     // Event: Mouse mouve
     const mouseMoveHandler = (e) => 
     {
+        console.log((1 - (e.clientY / window.innerHeight) * 2))
         gsap.to(camera.position, {
             duration: CONFIG.cameraMouseSpeed,
-            x: (e.clientX / window.innerWidth) / 2 * CONFIG.maxCameraPan,
-            y: - (e.clientY / window.innerHeight) / 2 * CONFIG.maxCameraPan,
+            x: (- .5 + (e.clientX / window.innerWidth)) * CONFIG.maxCameraPan,
+            y: (.5 - (e.clientY / window.innerHeight)) * CONFIG.maxCameraPan,
             ease: "power2.out"
         })
     }
@@ -213,9 +253,12 @@ async function initScene() {
 
 function updateScene() {
     console.log("updateScene")
-    // Update ring texture
-    threeObjects.ringMaterial.map = getRingTexture(props.title.toUpperCase(), CONFIG.ring)
-    threeObjects.ringMaterial.needsUpdate = true
+    // Update ring textures
+    // let titleTexture = 
+    let title = props.title.toUpperCase() + " " + props.year
+    threeObjects.ringTitleMaterial.map = getRingTexture(title, CONFIG.ringTitle)
+    let desc = props.places.join(" - ").toUpperCase()
+    threeObjects.ringDescMaterial.map = getRingTexture(desc, CONFIG.ringDesc)
 
     // Move earth so that gps position faces camera (only the earth moves)
     let duration = CONFIG.transition.earthRotationDuration
@@ -242,26 +285,34 @@ function updateScene() {
             ease: "sine.inOut",
         })
 
-    // Move ring to hide transition
+    // Move rings to hide transition
     duration = CONFIG.transition.ringRotationDuration
-    gsap.fromTo(threeObjects.ringGroup.rotation, {
+    gsap.fromTo(threeObjects.ringTitleGroup.rotation, {
         y: 0,
     }, {
         duration: duration,
         y: -Math.PI * 2 * 1,
         ease: "power3.out",
     })
+    gsap.fromTo(threeObjects.ringDescGroup.rotation, {
+        y: 0,
+    }, {
+        duration: duration,
+        y: -Math.PI * 2 * 1,
+        ease: "power3.out",
+    })
+
     // Deform ring
     let ringScaleTl = gsap.timeline();
     duration = CONFIG.transition.ringScaleDuration
     ringScaleTl
-        .to(threeObjects.ringGroup.scale, {
+        .to(threeObjects.ringsGroup.scale, {
             duration: duration / 3,
             x: CONFIG.transition.ringScaleValue.x,
             y: CONFIG.transition.ringScaleValue.y,
             z: CONFIG.transition.ringScaleValue.z,
             ease: "power2.out",
-        }).to(threeObjects.ringGroup.scale, {
+        }).to(threeObjects.ringsGroup.scale, {
             duration: duration / 3 * 2,
             x: 1,
             y: 1,
@@ -273,7 +324,7 @@ function updateScene() {
 function getRingTexture(text, params) {
     // Create canvas
     let textMargin = 80
-    let textureWidth = 2048 * 2
+    let textureWidth = CONFIG.ringTextureResolution
     let textureRatio = Math.PI * 2 * params.radius / params.height
     let canvas = document.createElement('canvas')
     canvas.width = textureWidth
@@ -297,7 +348,10 @@ function getRingTexture(text, params) {
 
     // Create texture from canvas
     let texture = new THREE.Texture(canvas)
+    // texture.anisotropy = 4
     texture.needsUpdate = true
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.NearestFilter
 
     return texture 
 }

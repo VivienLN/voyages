@@ -1,42 +1,65 @@
 [
   {
     "title": "Copenhague",
+    "places": ["Visite de la ville", "Tivoli Gardens"],
+    "year": 2019,
     "lat": 55.676098,
     "long": 12.568337
   },
   {
     "title": "Nîmes",
+    "places": ["Visite de la ville", "Pont du Gard", "Camargue"],
+    "year": 2022,
     "lat": 43.837883,
     "long": 4.360054
   },
   {
+    "title": "Gorges du Tarn",
+    "places": ["Camping", "Saint-Enimie", "Bambouseraie"],
+    "year": 2022,
+    "lat": 44.133333,
+    "long": 3.466667
+  },
+  {
+    "title": "Ardennes",
+    "places": ["Chateau fort de Bouillon", "Abbaye d'Orval"],
+    "year": 2020,
+    "lat": 49.5,
+    "long": 5.5
+  },
+  {
     "title": "Efteling",
+    "places": ["Visite du parc"],
+    "year": 2020,
     "lat": 51.648,
     "long": 5.048
   },
   {
-    "title": "Antarctique",
-    "lat": -75.250973,
-    "long": -0.071389
+    "title": "Belgique",
+    "places": ["Bruxelles", "Gand", "Walibi"],
+    "year": 2020,
+    "lat": 50.8503,
+    "long": 4.3517
   },
   {
-    "title": "Bruxelles",
-    "lat": 50.85045,
-    "long": 4.34878
+    "title": "Alsace",
+    "places": ["Mulhouse", "Colmar", "Musée de l'automobile"],
+    "year": 2021,
+    "lat": 48.5734,
+    "long": 7.7521
   },
   {
-    "title": "Sao Paulo",
-    "lat": -23.55052,
-    "long": -46.633309
+    "title": "Troyes",
+    "places": ["Visite de la ville", "Forêt d'Orient", "Nigloland"],
+    "year": 2021,
+    "lat": 48.2972,
+    "long": 4.0742
   },
   {
     "title": "Tokyo",
-    "lat": 35.689487,
-    "long": 139.691706
-  },
-  {
-    "title": "New York",
-    "lat": 40.712784,
-    "long": -74.005941
+    "places": ["OK ça c'est pour tester"],
+    "year": 2021,
+    "lat": 35.6895,
+    "long": 139.6917
   }
 ]
