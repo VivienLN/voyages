@@ -48,8 +48,10 @@ const CONFIG = {
     },
     marker: {
         color: 0xffe4af,
-        width: .2,
-        height: 1,
+        bottomWidth: .01,
+        topWidth: .018,
+        height: .5,
+        opacity: .8,
     },
     visibility: {
         axesHelper: false,
@@ -62,15 +64,17 @@ const CONFIG = {
     gps: {
         // And we want an additional offset because we dont want the GPS target to be at the screen *center* 
         latOffset: THREE.MathUtils.degToRad(-18),
-        lngOffset: THREE.MathUtils.degToRad(-12)
+        lngOffset: THREE.MathUtils.degToRad(-18)
     },
     transition: {
         earthRotationDuration: .6,
-        cameraDuration: 1,
+        cameraDuration: .8,
         cameraZ: .2,
         ringRotationDuration: .8,
         ringScaleValue: { x: 1.08, z: 1.08, y: .8 },
         ringScaleDuration: .8,
+        markerDurationOut: .2,
+        markerDurationIn: .3,
     }
 }
 
@@ -229,9 +233,18 @@ async function initScene() {
     earth.add(earthMesh)
 
     // Map Marker
-    const markerMaterial = new THREE.MeshBasicMaterial({color: CONFIG.marker.color})
-    const markerGeometry = new THREE.SphereGeometry(.02, 16, 16)
-    const marker = new THREE.Mesh(markerGeometry, markerMaterial)
+    const markerMaterial = new THREE.MeshBasicMaterial({
+        color: CONFIG.marker.color,
+        transparent: true,
+        opacity: CONFIG.marker.opacity,
+        alphaMap: textureLoader.load('src/assets/earth3d/textures/gradient.png'),
+    })
+    const markerGeometry = new THREE.CylinderGeometry(CONFIG.marker.topWidth, CONFIG.marker.bottomWidth, CONFIG.marker.height, 8, 1, true)
+    const markerMesh = new THREE.Mesh(markerGeometry, markerMaterial)
+    markerMesh.position.set(0, 0, CONFIG.marker.height / 2)
+    markerMesh.rotation.x = Math.PI / 2
+    const marker = new THREE.Group()
+    marker.add(markerMesh)
     marker.position.set(0, 0, CONFIG.earth.radius)
 
     // Earth group 2, to contain earth and marker
@@ -299,6 +312,8 @@ async function initScene() {
 
     threeObjects.camera = camera
     threeObjects.earth = earth
+    threeObjects.marker = marker
+    threeObjects.markerMaterial = markerMaterial
     threeObjects.ringTitleMaterial = ringTitleMaterial
     threeObjects.ringTitle = ringTitle
     threeObjects.ringDescMaterial = ringDescMaterial
@@ -435,6 +450,12 @@ async function initScene() {
         f.add(CONFIG.visibility, "ringDesc").onChange(() => {            
             ringDescMesh.visible = CONFIG.visibility.ringDesc
         })
+        f.add(CONFIG.marker, "opacity", 0, 1, .01).name("marker opacity").onChange(() => {            
+            markerMaterial.opacity = CONFIG.marker.opacity
+        })
+        f.addColor(CONFIG.marker, "color").name("marker color").onChange(() => {            
+            markerMaterial.color.set(CONFIG.marker.color)
+        })
 
         f = gui.addFolder('Camera')
         f.add(CONFIG, "enableOrbit")
@@ -491,9 +512,38 @@ function updateScene() {
         ease: "power2.inOut",
     })
 
+    // Animate marker
+    let markerTl = gsap.timeline()
+    markerTl.to(threeObjects.markerMaterial, {
+        duration: CONFIG.transition.markerDurationOut,
+        opacity: 0,
+        ease: "power1.inOut",
+    }).to(threeObjects.marker.scale, {
+        duration: CONFIG.transition.markerDurationOut,
+        x: .2,
+        y: .2,
+        z: 1.2,
+        ease: "power1.inOut",
+    }, "<"
+    ).to(threeObjects.markerMaterial, {
+        duration: CONFIG.transition.markerDurationIn,
+        opacity: CONFIG.marker.opacity,
+        ease: "power1.inOut",
+        delay: CONFIG.transition.earthRotationDuration / 2,
+    }).to(threeObjects.marker.scale, {
+        duration: CONFIG.transition.markerDurationIn,
+        x: 1,
+        y: 1,
+        z: 1,
+        ease: "power1.inOut",
+    }, "<")
+
+
+    duration = CONFIG.transition.markerDurationIn
+
     // Move camera during transition
-    let cameraTl = gsap.timeline();
-    duration = .8
+    let cameraTl = gsap.timeline()
+    duration = CONFIG.transition.cameraDuration
     cameraTl
         .to(threeObjects.camera.position, {
             duration: CONFIG.transition.cameraDuration / 3,
