@@ -10,20 +10,20 @@ import * as dat from 'lil-gui'
 const CONFIG = {
     debug: window && window.location.hash === '#debug',
     enableOrbit: false,
-    maxCameraPan: .1,
     cameraMouseSpeed: .4,
     ringTextureResolution: 2048 * 2 * 2,
     backgroundColor: 0x132b3a,
     camera: {
         z: 2.3,
-        roll: 0//- Math.PI * 2 / 24,
+        roll: - Math.PI * 2 / 24,
+        maxPan: .2
     },
     arrows: {
         z: 0,
-        size: .5,
+        size: .6,
         offset: {
             x: .1,
-            y: .1,
+            y: .19,
         }
     },
     earth: {
@@ -81,7 +81,7 @@ const CONFIG = {
         earthRotationDuration: .6,
         cameraDurationOut: .4,
         cameraDurationIn: .6,
-        cameraZ: .2,
+        cameraZ: .14,
         ringRotationDuration: .8,
         ringScaleValue: { x: 1.08, z: 1.08, y: .8 },
         ringScaleDuration: .8,
@@ -406,6 +406,9 @@ async function initScene() {
             controls.update()
         }
 
+        // Update arrows distance to camera
+        arrows.position.z = camera.position.z - CONFIG.camera.z 
+
         // Update atmo shader to always face camera
         atmoMaterial.uniforms.viewVector.value = new THREE.Vector3().subVectors( camera.position, atmoMesh.position )
         // Update atmo shader and mesh to adapt to CONFIG values in real time (for debug)
@@ -468,8 +471,8 @@ async function initScene() {
 
         gsap.to(camera.position, {
             duration: CONFIG.cameraMouseSpeed,
-            x: (- .5 + (e.clientX / window.innerWidth)) * CONFIG.maxCameraPan,
-            y: (.5 - (e.clientY / window.innerHeight)) * CONFIG.maxCameraPan,
+            x: (- .5 + (e.clientX / window.innerWidth)) * CONFIG.camera.maxPan,
+            y: (.5 - (e.clientY / window.innerHeight)) * CONFIG.camera.maxPan,
             ease: "power2.out"
         })
     }
@@ -514,7 +517,7 @@ async function initScene() {
 
         f = gui.addFolder('Camera')
         f.add(CONFIG, "enableOrbit")
-        f.add(CONFIG, "maxCameraPan", 0, 4, .01)
+        f.add(CONFIG.camera, "maxPan", 0, 4, .01)
 
         f = gui.addFolder('Arrows')
         f.add(CONFIG.arrows, "size", 0, 2, .001).onChange(() => {
