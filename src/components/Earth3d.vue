@@ -11,7 +11,6 @@ const CONFIG = {
     debug: window && window.location.hash === '#debug',
     enableOrbit: false,
     cameraMouseSpeed: .4,
-    ringTextureResolution: 2048 * 2 * 2,
     backgroundColor: 0x132b3a,
     camera: {
         z: 2.3,
@@ -20,11 +19,18 @@ const CONFIG = {
     },
     arrows: {
         z: 0,
-        size: .6,
+        size: 1,
         offset: {
             x: .1,
             y: .19,
-        }
+        },
+        textureResolution: 512,
+        alpha: .6,
+        // Sizes are relative to the texture resolution
+        fontSize: .04, 
+        textHeight: .1,
+        lineWidth: .016,
+        lineLength: .6
     },
     earth: {
         radius: 1,
@@ -38,7 +44,8 @@ const CONFIG = {
         scale: 1.08,
     },
     rings: {
-        rotation: .16
+        rotation: .16,
+        textureResolution: 2048 * 2 * 2,
     },
     ringTitle: {
         radius: 1.5,
@@ -129,9 +136,12 @@ async function initScene() {
     // ===================================
 
     // Load font
-    var ringFont = new FontFace('ringFont', 'url(https://fonts.gstatic.com/s/jost/v14/92zPtBhPNqw79Ij1E865zBUv7mwKIjVBNIg.woff2)');
-    await ringFont.load()
-    document.fonts.add(ringFont);
+    let font = new FontFace('font', 'url(https://fonts.gstatic.com/s/quicksand/v30/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkP8o58a-wg.woff2)');
+    await font.load()
+    document.fonts.add(font);
+    let fontBold = new FontFace('fontBold', 'url(https://fonts.gstatic.com/s/jost/v14/92zPtBhPNqw79Ij1E865zBUv7mwKIjVBNIg.woff2)');
+    await fontBold.load()
+    document.fonts.add(fontBold);
     
     // Threejs setup
     const canvas = threeCanvas.value
@@ -310,17 +320,17 @@ async function initScene() {
     // ===================================
 
     let arrowSize = CONFIG.arrows.size
-    var leftArrow = new THREE.Mesh(new THREE.PlaneGeometry(arrowSize, arrowSize), new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-    }))
-    var rightArrow = new THREE.Mesh(new THREE.PlaneGeometry(arrowSize, arrowSize), new THREE.MeshBasicMaterial({
-        color: 0xffff00,
-        transparent: true,
-    }))
-
+    const leftArrow = new THREE.Mesh(
+        new THREE.PlaneGeometry(arrowSize, arrowSize), 
+        new THREE.MeshBasicMaterial({transparent: true, opacity: CONFIG.arrows.alpha})
+    )
     leftArrow.rotation.z = CONFIG.camera.roll
+    const rightArrow = new THREE.Mesh(
+        new THREE.PlaneGeometry(arrowSize, arrowSize), 
+        new THREE.MeshBasicMaterial({transparent: true, opacity: CONFIG.arrows.alpha})
+    )
     rightArrow.rotation.z = CONFIG.camera.roll
+
     const arrows = new THREE.Group()
     arrows.add(leftArrow)
     arrows.add(rightArrow)
@@ -345,6 +355,8 @@ async function initScene() {
     // ===================================
 
     threeObjects.camera = camera
+    threeObjects.leftArrow = leftArrow
+    threeObjects.rightArrow = rightArrow
     threeObjects.earth = earth
     threeObjects.marker = marker
     threeObjects.markerMaterial = markerMaterial
@@ -434,8 +446,6 @@ async function initScene() {
         camera.updateProjectionMatrix()
 
         // Arrows
-        // See: https://stackoverflow.com/questions/51383187/positioning-a-3d-object-in-the-corners-of-the-canvas-three-js
-
         let plane = new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, CONFIG.arrows.z))
         let raycaster = new THREE.Raycaster()
         raycaster.setFromCamera({
@@ -444,12 +454,14 @@ async function initScene() {
         }, camera)
         
         let leftArrowPosition = new THREE.Vector3()
-        raycaster.ray.intersectPlane(plane, leftArrowPosition) // Vector3
+        raycaster.ray.intersectPlane(plane, leftArrowPosition)
         leftArrowPosition.add(new THREE.Vector3(CONFIG.arrows.size / 2, -CONFIG.arrows.size / 2, 0))
         leftArrow.position.copy(leftArrowPosition)
-        rightArrow.position.x = -leftArrowPosition.x
-        rightArrow.position.y = -leftArrowPosition.y
-        rightArrow.position.z = leftArrowPosition.z
+        rightArrow.position.set(
+            -leftArrowPosition.x,
+            -leftArrowPosition.y,
+            leftArrowPosition.z
+        )
         
         // False to let the browser handle the canvas size
         renderer.setSize(w, h, false)
@@ -465,14 +477,34 @@ async function initScene() {
 
     const mouseMoveHandler = (e) => {
 
+        // Mouse position (between -1 and 1)
+        let position = {
+            x: (e.clientX / window.innerWidth) * 2 - 1,
+            y: - (e.clientY / window.innerHeight) * 2 + 1
+        }
+
+        // Arrows
+        let raycaster = new THREE.Raycaster()
+        raycaster.setFromCamera( position, camera );
+        const intersects = raycaster.intersectObjects(arrows.children);
+        arrows.children.forEach((arrow) => {
+            arrow.material.opacity = CONFIG.arrows.alpha
+        })
+        intersects.forEach((intersect) => {
+            let arrow = intersect.object
+            arrow.material.opacity = 1
+        })
+        document.body.style.cursor = intersects.length ? "pointer" : "default";
+
+        // Camera (disabled if orbit is enabled)
         if(CONFIG.enableOrbit) {
             return
         }
 
         gsap.to(camera.position, {
             duration: CONFIG.cameraMouseSpeed,
-            x: (- .5 + (e.clientX / window.innerWidth)) * CONFIG.camera.maxPan,
-            y: (.5 - (e.clientY / window.innerHeight)) * CONFIG.camera.maxPan,
+            x: (position.x / 2) * CONFIG.camera.maxPan,
+            y: (position.y / 2) * CONFIG.camera.maxPan,
             ease: "power2.out"
         })
     }
@@ -579,12 +611,17 @@ async function initScene() {
 // ===================================
 
 function updateScene() {
-    console.log("updateScene")
+
     // Update ring textures
     let title = props.title.toUpperCase() + " " + props.year
     threeObjects.ringTitleMaterial.map = getRingTexture(title, CONFIG.ringTitle)
     let desc = props.places.join(" - ").toUpperCase()
     threeObjects.ringDescMaterial.map = getRingTexture(desc, CONFIG.ringDesc)
+
+    // Update arrows textures
+    let text = "Machin truc".toUpperCase()
+    threeObjects.leftArrow.material.map = getArrowTexture(text, true)
+    threeObjects.rightArrow.material.map = getArrowTexture(text, false)
 
     // Move earth so that gps position faces camera (only the earth moves)
     let duration = CONFIG.transition.earthRotationDuration
@@ -684,7 +721,7 @@ function updateScene() {
 function getRingTexture(text, params) {
     // Create canvas
     let textMargin = 80
-    let textureWidth = CONFIG.ringTextureResolution
+    let textureWidth = CONFIG.rings.textureResolution
     let textureRatio = Math.PI * 2 * params.radius / params.height
     let canvas = document.createElement('canvas')
     canvas.width = textureWidth
@@ -693,7 +730,7 @@ function getRingTexture(text, params) {
     // Init context
     let ctx = canvas.getContext('2d')
     ctx.textBaseline = 'middle'
-    ctx.font = `${canvas.height}px ringFont`
+    ctx.font = `${canvas.height}px fontBold`
 
     // Calculate repetitions
     let textWidth = ctx.measureText(text).width + textMargin
@@ -709,6 +746,80 @@ function getRingTexture(text, params) {
     // Create texture from canvas
     let texture = new THREE.Texture(canvas)
     // texture.anisotropy = 4
+    texture.needsUpdate = true
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.NearestFilter
+
+    return texture 
+}
+
+
+// ===================================
+// Helper to get arrow texture from a text
+// ===================================
+
+function getArrowTexture(text, isLeft) {
+    // Create canvas & context
+    let textureSize = CONFIG.arrows.textureResolution
+    let canvas = document.createElement('canvas')
+    canvas.width = textureSize
+    canvas.height = textureSize
+    let ctx = canvas.getContext('2d')
+
+    // Text
+    let fontSize = CONFIG.arrows.fontSize * textureSize
+    let textHeight = CONFIG.arrows.textHeight * textureSize
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = 'white'
+
+    if(isLeft) {
+        let textY = fontSize
+        let prefix = "Précédent // ".toUpperCase()
+        ctx.textAlign = "left"
+        ctx.font = `${fontSize}px font`
+        ctx.fillText(prefix, 0, textY)
+        
+        let textX = ctx.measureText(prefix).width
+        ctx.font = `${fontSize}px fontBold`
+        ctx.fillText(text, textX, textY)
+
+    } else {
+        let textY = textureSize - fontSize
+        ctx.textAlign = "right"
+
+        ctx.font = `${fontSize}px fontBold`
+        ctx.fillText(text, textureSize, textY)
+        
+        let prefix = "Suivant // ".toUpperCase()
+        let prefixX = textureSize - ctx.measureText(text).width
+        ctx.font = `${fontSize}px font`
+        ctx.fillText(prefix, prefixX, textY)
+    }
+
+    // Arrow lines
+    let lineLength = CONFIG.arrows.lineLength * textureSize
+    let lineWidth = CONFIG.arrows.lineWidth * textureSize
+    let points = [
+        { x: 0, y: lineLength },
+        { x: (isLeft ? 0 : lineLength), y: (isLeft ? 0 : lineLength) },
+        { x: lineLength, y: 0 },
+    ]
+    let offset = {
+        x: isLeft ? (lineWidth / 2) : (textureSize - lineLength - (lineWidth / 2)),
+        y: isLeft ? textHeight : (textureSize - lineLength - textHeight),
+    }
+    ctx.lineWidth = lineWidth
+    ctx.strokeStyle = 'white'
+    ctx.lineCap = "round"
+    ctx.beginPath()
+    points.forEach((p, i) => {
+        (i == 0) ? ctx.moveTo(offset.x + p.x, offset.y + p.y) : ctx.lineTo(offset.x + p.x, offset.y + p.y)
+    })
+    ctx.stroke()
+
+
+    // Create texture from canvas
+    let texture = new THREE.Texture(canvas)
     texture.needsUpdate = true
     texture.minFilter = THREE.LinearFilter
     texture.magFilter = THREE.NearestFilter
