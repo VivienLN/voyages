@@ -12,9 +12,20 @@ const CONFIG = {
     enableOrbit: false,
     maxCameraPan: .1,
     cameraMouseSpeed: .4,
-    cameraZ: 2.3,
     ringTextureResolution: 2048 * 2 * 2,
     backgroundColor: 0x132b3a,
+    camera: {
+        z: 2.3,
+        roll: 0//- Math.PI * 2 / 24,
+    },
+    arrows: {
+        z: 0,
+        size: .5,
+        offset: {
+            x: .1,
+            y: .1,
+        }
+    },
     earth: {
         radius: 1,
         // Texture can be offset from the 0 latitude/longitude
@@ -68,7 +79,8 @@ const CONFIG = {
     },
     transition: {
         earthRotationDuration: .6,
-        cameraDuration: .8,
+        cameraDurationOut: .4,
+        cameraDurationIn: .6,
         cameraZ: .2,
         ringRotationDuration: .8,
         ringScaleValue: { x: 1.08, z: 1.08, y: .8 },
@@ -147,8 +159,7 @@ async function initScene() {
     // ===================================
 
     const camera = new THREE.PerspectiveCamera(75)
-    camera.position.z = CONFIG.cameraZ
-    camera.rotation.z = - Math.PI * 2 / 24
+    camera.position.z = CONFIG.camera.z
     scene.add(camera)
 
 
@@ -293,6 +304,29 @@ async function initScene() {
     scene.add(ringsGroup)
 
 
+
+    // ===================================
+    // Arrows
+    // ===================================
+
+    let arrowSize = CONFIG.arrows.size
+    var leftArrow = new THREE.Mesh(new THREE.PlaneGeometry(arrowSize, arrowSize), new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+    }))
+    var rightArrow = new THREE.Mesh(new THREE.PlaneGeometry(arrowSize, arrowSize), new THREE.MeshBasicMaterial({
+        color: 0xffff00,
+        transparent: true,
+    }))
+
+    leftArrow.rotation.z = CONFIG.camera.roll
+    rightArrow.rotation.z = CONFIG.camera.roll
+    const arrows = new THREE.Group()
+    arrows.add(leftArrow)
+    arrows.add(rightArrow)
+    scene.add(arrows)
+
+
     // ===================================
     // Lights
     // ===================================
@@ -367,7 +401,7 @@ async function initScene() {
         controls.enabled = CONFIG.enableOrbit
         if(!controls.enabled) {
             camera.lookAt(earth.position)
-            camera.rotation.z = - Math.PI * 2 / 24
+            camera.rotation.z = CONFIG.camera.roll
         } else {
             controls.update()
         }
@@ -395,6 +429,25 @@ async function initScene() {
         let h = canvas.clientHeight
         camera.aspect = w / h
         camera.updateProjectionMatrix()
+
+        // Arrows
+        // See: https://stackoverflow.com/questions/51383187/positioning-a-3d-object-in-the-corners-of-the-canvas-three-js
+
+        let plane = new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, CONFIG.arrows.z))
+        let raycaster = new THREE.Raycaster()
+        raycaster.setFromCamera({
+            x: -(1 - CONFIG.arrows.offset.x),
+            y: 1 - CONFIG.arrows.offset.y,
+        }, camera)
+        
+        let leftArrowPosition = new THREE.Vector3()
+        raycaster.ray.intersectPlane(plane, leftArrowPosition) // Vector3
+        leftArrowPosition.add(new THREE.Vector3(CONFIG.arrows.size / 2, -CONFIG.arrows.size / 2, 0))
+        leftArrow.position.copy(leftArrowPosition)
+        rightArrow.position.x = -leftArrowPosition.x
+        rightArrow.position.y = -leftArrowPosition.y
+        rightArrow.position.z = leftArrowPosition.z
+        
         // False to let the browser handle the canvas size
         renderer.setSize(w, h, false)
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -408,9 +461,11 @@ async function initScene() {
     // ===================================
 
     const mouseMoveHandler = (e) => {
+
         if(CONFIG.enableOrbit) {
             return
         }
+
         gsap.to(camera.position, {
             duration: CONFIG.cameraMouseSpeed,
             x: (- .5 + (e.clientX / window.innerWidth)) * CONFIG.maxCameraPan,
@@ -460,6 +515,33 @@ async function initScene() {
         f = gui.addFolder('Camera')
         f.add(CONFIG, "enableOrbit")
         f.add(CONFIG, "maxCameraPan", 0, 4, .01)
+
+        f = gui.addFolder('Arrows')
+        f.add(CONFIG.arrows, "size", 0, 2, .001).onChange(() => {
+            let arrowSize = CONFIG.arrows.size
+            leftArrow.geometry.dispose()
+            rightArrow.geometry.dispose()
+            arrows.remove(leftArrow)
+            arrows.remove(rightArrow)
+            leftArrow = new THREE.Mesh(new THREE.PlaneGeometry(arrowSize, arrowSize), new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+            }))
+            rightArrow = new THREE.Mesh(new THREE.PlaneGeometry(arrowSize, arrowSize), new THREE.MeshBasicMaterial({
+                color: 0xffff00,
+                transparent: true,
+            }))
+
+            leftArrow.rotation.z = CONFIG.camera.roll
+            rightArrow.rotation.z = CONFIG.camera.roll
+
+            arrows.add(leftArrow)
+            arrows.add(rightArrow)
+            resizeHandler()
+        })
+        f.add(CONFIG.arrows, "z", -3, 3, .01).onChange(resizeHandler)
+        f.add(CONFIG.arrows.offset, "x", -.5, .5, .01).name("offset x").onChange(resizeHandler)
+        f.add(CONFIG.arrows.offset, "y", -.5, .5, .01).name("offset y").onChange(resizeHandler)
 
         f = gui.addFolder('Atmosphere & Clouds')
         f.add(CONFIG.atmosphere, "c", 0, 3, .001)
@@ -546,12 +628,12 @@ function updateScene() {
     duration = CONFIG.transition.cameraDuration
     cameraTl
         .to(threeObjects.camera.position, {
-            duration: CONFIG.transition.cameraDuration / 3,
-            z: CONFIG.cameraZ + CONFIG.transition.cameraZ,
+            duration: CONFIG.transition.cameraDurationOut,
+            z: CONFIG.camera.z + CONFIG.transition.cameraZ,
             ease: "sine.inOut",
         }).to(threeObjects.camera.position, {
-            duration: CONFIG.transition.cameraDuration / 3 * 2,
-            z: CONFIG.cameraZ,
+            duration: CONFIG.transition.cameraDurationIn,
+            z: CONFIG.camera.z,
             ease: "sine.inOut",
         })
 
