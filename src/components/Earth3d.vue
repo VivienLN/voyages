@@ -25,7 +25,10 @@ const CONFIG = {
             y: .19,
         },
         textureResolution: 512,
-        alpha: .6,
+        alpha: .3,
+        alphaHover: 1,
+        scaleHover: 1.1,
+        transition: 1.2,
         // Sizes are relative to the texture resolution
         fontSize: .04, 
         textHeight: .1,
@@ -486,15 +489,24 @@ async function initScene() {
         // Arrows
         let raycaster = new THREE.Raycaster()
         raycaster.setFromCamera( position, camera );
-        const intersects = raycaster.intersectObjects(arrows.children);
-        arrows.children.forEach((arrow) => {
-            arrow.material.opacity = CONFIG.arrows.alpha
-        })
-        intersects.forEach((intersect) => {
-            let arrow = intersect.object
-            arrow.material.opacity = 1
-        })
+        let intersects = raycaster.intersectObjects(arrows.children);
         document.body.style.cursor = intersects.length ? "pointer" : "default";
+        arrows.children.forEach((arrow) => {
+            let hover = intersects.find((intersect) => intersect.object === arrow)
+            let targetOpacity = hover ? CONFIG.arrows.alphaHover : CONFIG.arrows.alpha
+            let targetScale = hover ? CONFIG.arrows.scaleHover : 1
+            gsap.to(arrow.material, {
+                duration: CONFIG.arrows.transition,
+                opacity: targetOpacity,
+                ease: "power4.out"
+            })
+            gsap.to(arrow.scale, {
+                duration: CONFIG.arrows.transition,
+                x: targetScale,
+                y: targetScale,
+                ease: "power4.out"
+            })
+        })
 
         // Camera (disabled if orbit is enabled)
         if(CONFIG.enableOrbit) {
@@ -577,6 +589,10 @@ async function initScene() {
         f.add(CONFIG.arrows, "z", -3, 3, .01).onChange(resizeHandler)
         f.add(CONFIG.arrows.offset, "x", -.5, .5, .01).name("offset x").onChange(resizeHandler)
         f.add(CONFIG.arrows.offset, "y", -.5, .5, .01).name("offset y").onChange(resizeHandler)
+        f.add(CONFIG.arrows, "alpha", 0, 1, .01)
+        f.add(CONFIG.arrows, "alphaHover", 0, 1, .01)
+        f.add(CONFIG.arrows, "scaleHover", 0, 3, .01)
+        f.add(CONFIG.arrows, "transition", 0, 10, .01)
 
         f = gui.addFolder('Atmosphere & Clouds')
         f.add(CONFIG.atmosphere, "c", 0, 3, .001)
