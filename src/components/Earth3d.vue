@@ -62,9 +62,10 @@ const CONFIG = {
         transition: 1.2,
         // Sizes are relative to the texture resolution
         fontSize: .04, 
+        maskHeight: .05,
         textHeight: .1,
         lineWidth: .016,
-        lineLength: .6
+        lineLength: .6,
     },
     earth: {
         radius: 1,
@@ -128,7 +129,21 @@ const CONFIG = {
         ringScaleDuration: .8,
         markerDurationOut: .2,
         markerDurationIn: .3,
+        arrowTextDuration: .4,
+        arrowDelay: .1,
     }
+}
+
+// Holds values that are updated by gsap
+// and used by some frame-by-frame animations
+const animated = {
+    arrows: {
+        text1Offset: 0,
+        text2Offset: 0,
+        textAlpha: 1,
+        leftText: "",
+        rightText: "",
+    },
 }
 
 // ThreeJS global variables/const
@@ -145,6 +160,8 @@ const threeObjects = {
     ringDescMaterial: null,
     ringDesc: null,
     ringsGroup: null,
+    leftArrowCanvas : null,
+    rightArrowCanvas : null,
 }
 
 // Mounted: init
@@ -346,14 +363,25 @@ async function initScene() {
     // ===================================
 
     let arrowSize = CONFIG.arrows.size
+    
+    const leftArrowCanvas = document.createElement('canvas')
+    let leftTexture = new THREE.Texture(leftArrowCanvas)
+    leftTexture.minFilter = THREE.LinearFilter
+    leftTexture.magFilter = THREE.NearestFilter
     const leftArrow = new THREE.Mesh(
         new THREE.PlaneGeometry(arrowSize, arrowSize), 
-        new THREE.MeshBasicMaterial({transparent: true, opacity: CONFIG.arrows.alpha})
+        new THREE.MeshBasicMaterial({transparent: true, opacity: CONFIG.arrows.alpha, map: leftTexture})
     )
     leftArrow.rotation.z = CONFIG.camera.roll
+
+    
+    const rightArrowCanvas = document.createElement('canvas')
+    let rightTexture = new THREE.Texture(rightArrowCanvas)
+    rightTexture.minFilter = THREE.LinearFilter
+    rightTexture.magFilter = THREE.NearestFilter
     const rightArrow = new THREE.Mesh(
         new THREE.PlaneGeometry(arrowSize, arrowSize), 
-        new THREE.MeshBasicMaterial({transparent: true, opacity: CONFIG.arrows.alpha})
+        new THREE.MeshBasicMaterial({transparent: true, opacity: CONFIG.arrows.alpha, map: rightTexture})
     )
     rightArrow.rotation.z = CONFIG.camera.roll
 
@@ -391,6 +419,8 @@ async function initScene() {
     threeObjects.ringDescMaterial = ringDescMaterial
     threeObjects.ringDesc = ringDesc
     threeObjects.ringsGroup = ringsGroup
+    threeObjects.leftArrowCanvas = leftArrowCanvas
+    threeObjects.rightArrowCanvas = rightArrowCanvas
 
 
     // ===================================
@@ -446,6 +476,19 @@ async function initScene() {
 
         // Update arrows distance to camera
         arrows.position.z = camera.position.z - CONFIG.camera.z 
+
+        // Update arrows textures
+        refreshArrowTexture(
+            leftArrowCanvas, 
+            true
+        )
+        refreshArrowTexture(
+            rightArrowCanvas, 
+            false
+        )
+        leftArrow.material.map.needsUpdate = true
+        rightArrow.material.map.needsUpdate = true
+
 
         // Update atmo shader to always face camera
         atmoMaterial.uniforms.viewVector.value = new THREE.Vector3().subVectors( camera.position, atmoMesh.position )
@@ -675,10 +718,6 @@ function updateScene() {
     let desc = props.places.join(" - ").toUpperCase()
     threeObjects.ringDescMaterial.map = getRingTexture(desc, CONFIG.ringDesc)
 
-    // Update arrows textures
-    threeObjects.leftArrow.material.map = getArrowTexture(props.previous.title.toUpperCase(), true)
-    threeObjects.rightArrow.material.map = getArrowTexture(props.next.title.toUpperCase(), false)
-
     // Move earth so that gps position faces camera (only the earth moves)
     let duration = CONFIG.transition.earthRotationDuration
     let targetX = THREE.MathUtils.degToRad(props.lat)
@@ -689,6 +728,37 @@ function updateScene() {
         y: targetY,
         ease: "power2.inOut",
     })
+
+    // Animate arrows text
+    let arrowTl = gsap.timeline()
+    gsap.killTweensOf(animated.arrows)
+    arrowTl.to(animated.arrows, {
+        textAlpha: 0,
+        text1Offset: 1,
+        duration: CONFIG.transition.arrowTextDuration,
+        ease: "exp.in",
+        onComplete: () => {
+            animated.arrows.rightText = props.next.title.toUpperCase()
+            animated.arrows.leftText = props.previous.title.toUpperCase()
+        }
+    }).to(animated.arrows, {
+        delay: CONFIG.transition.arrowDelay,
+        text2Offset: 1,
+        duration: CONFIG.transition.arrowTextDuration,
+        ease: "exp.in",
+    }, "<"
+    ).to(animated.arrows, {
+        textAlpha: 1,
+        text1Offset: 0,
+        duration:  CONFIG.transition.arrowTextDuration,
+        ease: "exp.out"
+    }).to(animated.arrows, {
+        delay: CONFIG.transition.arrowDelay,
+        text2Offset: 0,
+        duration: CONFIG.transition.arrowTextDuration,
+        ease: "exp.out",
+    }, "<"
+    )
 
     // Animate marker
     let markerTl = gsap.timeline()
@@ -715,9 +785,6 @@ function updateScene() {
         z: 1,
         ease: "power1.inOut",
     }, "<")
-
-
-    duration = CONFIG.transition.markerDurationIn
 
     // Move camera during transition
     let cameraTl = gsap.timeline()
@@ -774,6 +841,7 @@ function updateScene() {
 // Helper to get ring & arrow texture from text
 // ===================================
 
+// Called only on scene update
 function getRingTexture(text, params) {
     // Create canvas
     let textMargin = 80
@@ -809,43 +877,64 @@ function getRingTexture(text, params) {
     return texture 
 }
 
-function getArrowTexture(text, isLeft) { 
+// Called frame by frame by threejs main loop (tick() function)
+function refreshArrowTexture(canvas, isLeft) { 
     // Create canvas & context
     let textureSize = CONFIG.arrows.textureResolution
-    let canvas = document.createElement('canvas')
     canvas.width = textureSize
     canvas.height = textureSize
     let ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     // Text
     let fontSize = CONFIG.arrows.fontSize * textureSize
     let textHeight = CONFIG.arrows.textHeight * textureSize
     ctx.textBaseline = 'middle'
     ctx.fillStyle = 'white'
+    
+    // For animation
+    let maskHeight = CONFIG.arrows.maskHeight * textureSize
+    let text1Offset = maskHeight * animated.arrows.text1Offset
+    let text2Offset = maskHeight * animated.arrows.text2Offset
+    ctx.globalAlpha = animated.arrows.textAlpha
 
     if(isLeft) {
-        let textY = fontSize
+        let text = animated.arrows.leftText
+        let textY = textHeight / 2
         let prefix = "Précédent // ".toUpperCase()
         ctx.textAlign = "left"
         ctx.font = `${fontSize}px font`
-        ctx.fillText(prefix, 0, textY)
+        ctx.fillText(prefix, 0, textY + text1Offset)
         
         let textX = ctx.measureText(prefix).width
         ctx.font = `${fontSize}px fontBold`
-        ctx.fillText(text, textX, textY)
+        ctx.fillText(text, textX, textY + text2Offset)
+        
+        // Mask
+        ctx.globalCompositeOperation = 'destination-in'
+        ctx.fillRect(0, (textHeight - maskHeight) / 2, textureSize, maskHeight)
+        ctx.globalCompositeOperation = 'source-over'
 
     } else {
-        let textY = textureSize - fontSize
+        let text = animated.arrows.rightText
+        let textY = textureSize - (textHeight / 2)
         ctx.textAlign = "right"
 
         ctx.font = `${fontSize}px fontBold`
-        ctx.fillText(text, textureSize, textY)
+        ctx.fillText(text, textureSize, textY - text1Offset)
         
         let prefix = "Suivant // ".toUpperCase()
         let prefixX = textureSize - ctx.measureText(text).width
         ctx.font = `${fontSize}px font`
-        ctx.fillText(prefix, prefixX, textY)
+        ctx.fillText(prefix, prefixX, textY - text2Offset)
+        
+        // Mask
+        ctx.globalCompositeOperation = 'destination-in'
+        ctx.fillRect(0, textureSize - (textHeight + maskHeight) / 2, textureSize, maskHeight)
+        ctx.globalCompositeOperation = 'source-over'
     }
+
+    ctx.globalAlpha = 1
 
     // Arrow lines
     let lineLength = CONFIG.arrows.lineLength * textureSize
@@ -867,15 +956,6 @@ function getArrowTexture(text, isLeft) {
         (i == 0) ? ctx.moveTo(offset.x + p.x, offset.y + p.y) : ctx.lineTo(offset.x + p.x, offset.y + p.y)
     })
     ctx.stroke()
-
-
-    // Create texture from canvas
-    let texture = new THREE.Texture(canvas)
-    texture.needsUpdate = true
-    texture.minFilter = THREE.LinearFilter
-    texture.magFilter = THREE.NearestFilter
-
-    return texture 
 }
 
 
