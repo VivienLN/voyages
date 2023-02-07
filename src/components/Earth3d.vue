@@ -61,9 +61,9 @@ const CONFIG = {
         scaleHover: 1.1,
         transition: 1.2,
         // Sizes are relative to the texture resolution
-        fontSize: .04, 
-        maskHeight: .05,
-        textHeight: .1,
+        fontSize: .05, 
+        maskHeight: .07,
+        textHeight: .12,
         lineWidth: .016,
         lineLength: .6,
     },
@@ -84,7 +84,7 @@ const CONFIG = {
     },
     ringTitle: {
         radius: 1.5,
-        height: .22,
+        height: .20,
         y: .06,
         color: 0xffe4aa,
         rotationSpeed: .2,
