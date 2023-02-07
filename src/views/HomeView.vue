@@ -4,33 +4,51 @@
   import { reactive, ref } from 'vue'
 
   const state = reactive({
-    current: {}
+    current: {},
+    previous: {},
+    next: {},
   })
   const index = ref(0)
 
   updateCurrent()
 
   function previous() {
-    let target = index.value - 1
-    index.value = target < 0 ? destinations.length - 1 : target
+    index.value = getPreviousIndex()
     updateCurrent()
   }
 
   function next() {
-    let target = index.value + 1
-    index.value = target > destinations.length - 1 ? 0 : target
+    index.value = getNextIndex()
     updateCurrent()
+  }
+
+  function getPreviousIndex() {
+    let target = index.value - 1
+    return target < 0 ? destinations.length - 1 : target
+  }
+
+  function getNextIndex() {
+    let target = index.value + 1
+    return target > destinations.length - 1 ? 0 : target
   }
 
   function updateCurrent() {
     state.current = destinations[index.value]
+    state.previous = destinations[getPreviousIndex()]
+    state.next = destinations[getNextIndex()]
   }
 </script>
 
 <template>
   <main>
     {{ destinations.length }}
-    <Earth3d v-bind="state.current" />
+    <Earth3d 
+      :previous="state.previous"
+      :next="state.next"
+      v-bind="state.current"
+      @clickPrevious="previous"
+      @clickNext="next"
+    />
     <button @click="previous">Précédent</button>
     <button @click="next">Suivant</button>
   </main>

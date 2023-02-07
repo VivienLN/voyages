@@ -7,6 +7,37 @@ gsap.registerPlugin(CustomEase)
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import * as dat from 'lil-gui'
 
+const props = defineProps({
+    title: {
+        type: String,
+        required: true
+    },
+    previous: {
+        type: Object,
+        required: true
+    },
+    next: {
+        type: Object,
+        required: true
+    },
+    year: {
+        type: Number,
+        required: true
+    },
+    places: {
+        type: Array,
+        required: true
+    },
+    lat: {
+        type: Number,
+        required: true
+    },
+    long: {
+        type: Number,
+        required: true
+    },
+})
+
 const CONFIG = {
     debug: window && window.location.hash === '#debug',
     enableOrbit: false,
@@ -21,8 +52,8 @@ const CONFIG = {
         z: 0,
         size: 1,
         offset: {
-            x: .1,
-            y: .19,
+            x: .11,
+            y: .2,
         },
         textureResolution: 512,
         alpha: .3,
@@ -100,32 +131,21 @@ const CONFIG = {
     }
 }
 
-const props = defineProps({
-    title: {
-        type: String,
-        required: true
-    },
-    year: {
-        type: Number,
-        required: true
-    },
-    places: {
-        type: Array,
-        required: true
-    },
-    lat: {
-        type: Number,
-        required: true
-    },
-    long: {
-        type: Number,
-        required: true
-    },
-})
-
 // ThreeJS global variables/const
 const threeCanvas = ref(null)
-const threeObjects = {}
+const threeObjects = {
+    camera: null,
+    leftArrow: null,
+    rightArrow: null,
+    earth: null,
+    marker: null,
+    markerMaterial: null,
+    ringTitleMaterial: null,
+    ringTitle: null,
+    ringDescMaterial: null,
+    ringDesc: null,
+    ringsGroup: null,
+}
 
 // Mounted: init
 onMounted(initScene)
@@ -137,6 +157,9 @@ async function initScene() {
     // ===================================
     // Setup & Loading
     // ===================================
+
+    // For mouse events
+    var hovered = null
 
     // Load font
     let font = new FontFace('font', 'url(https://fonts.gstatic.com/s/quicksand/v30/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkP8o58a-wg.woff2)');
@@ -264,19 +287,19 @@ async function initScene() {
         alphaMap: textureLoader.load('src/assets/earth3d/textures/gradient.png'),
     })
     const markerGeometry = new THREE.CylinderGeometry(CONFIG.marker.topWidth, CONFIG.marker.bottomWidth, CONFIG.marker.height, 8, 1, true)
-    const markerMesh = new THREE.Mesh(markerGeometry, markerMaterial)
-    markerMesh.position.set(0, 0, CONFIG.marker.height / 2)
-    markerMesh.rotation.x = Math.PI / 2
-    const marker = new THREE.Group()
-    marker.add(markerMesh)
-    marker.position.set(0, 0, CONFIG.earth.radius)
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial)
+    marker.position.set(0, 0, CONFIG.marker.height / 2)
+    marker.rotation.x = Math.PI / 2
+    const markerGroup = new THREE.Group()
+    markerGroup.add(marker)
+    markerGroup.position.set(0, 0, CONFIG.earth.radius)
 
     // Earth group 2, to contain earth and marker
     // and to rotate the whole thing
     const earthGroup = new THREE.Group()
     earthGroup.rotation.set(CONFIG.gps.latOffset, CONFIG.gps.lngOffset, 0)
     earthGroup.add(earth)
-    earthGroup.add(marker)
+    earthGroup.add(markerGroup)
     scene.add(earthGroup)
 
 
@@ -361,8 +384,8 @@ async function initScene() {
     threeObjects.leftArrow = leftArrow
     threeObjects.rightArrow = rightArrow
     threeObjects.earth = earth
+    threeObjects.markerGroup = markerGroup
     threeObjects.marker = marker
-    threeObjects.markerMaterial = markerMaterial
     threeObjects.ringTitleMaterial = ringTitleMaterial
     threeObjects.ringTitle = ringTitle
     threeObjects.ringDescMaterial = ringDescMaterial
@@ -490,7 +513,7 @@ async function initScene() {
         let raycaster = new THREE.Raycaster()
         raycaster.setFromCamera( position, camera );
         let intersects = raycaster.intersectObjects(arrows.children);
-        document.body.style.cursor = intersects.length ? "pointer" : "default";
+        hovered = null
         arrows.children.forEach((arrow) => {
             let hover = intersects.find((intersect) => intersect.object === arrow)
             let targetOpacity = hover ? CONFIG.arrows.alphaHover : CONFIG.arrows.alpha
@@ -506,7 +529,11 @@ async function initScene() {
                 y: targetScale,
                 ease: "power4.out"
             })
+            if(hover) {
+                hovered = arrow
+            }
         })
+        document.body.style.cursor = intersects.length ? "pointer" : "default";
 
         // Camera (disabled if orbit is enabled)
         if(CONFIG.enableOrbit) {
@@ -521,6 +548,20 @@ async function initScene() {
         })
     }
     window.addEventListener('mousemove', mouseMoveHandler)
+
+
+    // ===================================
+    // Event: Mouse click
+    // ===================================
+
+    const mouseClickHandler = (e) => {
+        if(hovered === leftArrow) {
+            canvas.dispatchEvent(new Event('onClickPrevious'))
+        } else if(hovered === rightArrow) {
+            canvas.dispatchEvent(new Event('onClickNext'))
+        }
+    }
+    window.addEventListener('click', mouseClickHandler)
 
 
     // ===================================
@@ -635,14 +676,13 @@ function updateScene() {
     threeObjects.ringDescMaterial.map = getRingTexture(desc, CONFIG.ringDesc)
 
     // Update arrows textures
-    let text = "Machin truc".toUpperCase()
-    threeObjects.leftArrow.material.map = getArrowTexture(text, true)
-    threeObjects.rightArrow.material.map = getArrowTexture(text, false)
+    threeObjects.leftArrow.material.map = getArrowTexture(props.previous.title.toUpperCase(), true)
+    threeObjects.rightArrow.material.map = getArrowTexture(props.next.title.toUpperCase(), false)
 
     // Move earth so that gps position faces camera (only the earth moves)
     let duration = CONFIG.transition.earthRotationDuration
-    let targetX = THREE.MathUtils.degToRad(props.lat) // + CONFIG.gps.latitudeTextureOffset
-    let targetY = THREE.MathUtils.degToRad(-props.long) // + CONFIG.gps.longitudeTextureOffset
+    let targetX = THREE.MathUtils.degToRad(props.lat)
+    let targetY = THREE.MathUtils.degToRad(-props.long)
     gsap.to(threeObjects.earth.rotation, {
         duration: duration * 2,
         x: targetX,
@@ -652,23 +692,23 @@ function updateScene() {
 
     // Animate marker
     let markerTl = gsap.timeline()
-    markerTl.to(threeObjects.markerMaterial, {
+    markerTl.to(threeObjects.marker.material, {
         duration: CONFIG.transition.markerDurationOut,
         opacity: 0,
         ease: "power1.inOut",
-    }).to(threeObjects.marker.scale, {
+    }).to(threeObjects.markerGroup.scale, {
         duration: CONFIG.transition.markerDurationOut,
         x: .2,
         y: .2,
         z: 1.2,
         ease: "power1.inOut",
     }, "<"
-    ).to(threeObjects.markerMaterial, {
+    ).to(threeObjects.marker.material, {
         duration: CONFIG.transition.markerDurationIn,
         opacity: CONFIG.marker.opacity,
         ease: "power1.inOut",
         delay: CONFIG.transition.earthRotationDuration / 2,
-    }).to(threeObjects.marker.scale, {
+    }).to(threeObjects.markerGroup.scale, {
         duration: CONFIG.transition.markerDurationIn,
         x: 1,
         y: 1,
@@ -731,7 +771,7 @@ function updateScene() {
 
 
 // ===================================
-// Helper to get ring texture from a text
+// Helper to get ring & arrow texture from text
 // ===================================
 
 function getRingTexture(text, params) {
@@ -769,12 +809,7 @@ function getRingTexture(text, params) {
     return texture 
 }
 
-
-// ===================================
-// Helper to get arrow texture from a text
-// ===================================
-
-function getArrowTexture(text, isLeft) {
+function getArrowTexture(text, isLeft) { 
     // Create canvas & context
     let textureSize = CONFIG.arrows.textureResolution
     let canvas = document.createElement('canvas')
@@ -843,10 +878,20 @@ function getArrowTexture(text, isLeft) {
     return texture 
 }
 
+
+// ===================================
+// Canvas event handling
+// ===================================
+
+
 </script>
 
 <template>
-    <canvas ref="threeCanvas"></canvas>
+    <canvas 
+        ref="threeCanvas"
+        @onClickPrevious="$emit('clickPrevious')"
+        @onClickNext="$emit('clickNext')"
+    ></canvas>
 </template>
 
 <style scoped>
