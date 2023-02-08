@@ -1,10 +1,13 @@
 <script setup>
 import { onMounted, onBeforeUpdate, ref } from 'vue'
 import * as THREE from 'three'
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import gsap from "gsap"
 import { CustomEase } from "gsap/CustomEase"
 gsap.registerPlugin(CustomEase)
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import * as dat from 'lil-gui'
 
 const props = defineProps({
@@ -45,8 +48,9 @@ const CONFIG = {
     backgroundColor: 0x132b3a,
     camera: {
         z: 2.3,
+        raycastPlaneZ: 2,
         roll: - Math.PI * 2 / 24,
-        maxPan: .2
+        maxPan: .2,
     },
     arrows: {
         z: 0,
@@ -84,7 +88,7 @@ const CONFIG = {
     },
     ringTitle: {
         radius: 1.5,
-        height: .20,
+        height: .2,
         y: .06,
         color: 0xffe4aa,
         rotationSpeed: .2,
@@ -177,6 +181,7 @@ async function initScene() {
 
     // For mouse events
     var hovered = null
+    const mouseRaycaster = new THREE.Raycaster()
 
     // Load font
     let font = new FontFace('font', 'url(https://fonts.gstatic.com/s/quicksand/v30/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkP8o58a-wg.woff2)');
@@ -318,6 +323,18 @@ async function initScene() {
     earthGroup.add(earth)
     earthGroup.add(markerGroup)
     scene.add(earthGroup)
+
+    // Marker line (from marker on surface to mouse position)
+    const markerLineGeometry = new LineGeometry()
+    const markerLine = new Line2(markerLineGeometry, new LineMaterial({
+        color: 0xffffff,
+        linewidth: .003,
+        dashed: false,
+        alphaToCoverage: false,
+        transparent: true,
+        depthWrite: false
+    }))
+    scene.add(markerLine)
 
 
     // ===================================
@@ -515,13 +532,16 @@ async function initScene() {
         camera.updateProjectionMatrix()
 
         // Arrows
-        let plane = new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, CONFIG.arrows.z))
         let raycaster = new THREE.Raycaster()
         raycaster.setFromCamera({
             x: -(1 - CONFIG.arrows.offset.x),
             y: 1 - CONFIG.arrows.offset.y,
         }, camera)
         
+        let plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+            new THREE.Vector3(0, 0, 1), 
+            new THREE.Vector3(0, 0, CONFIG.arrows.z)
+        )
         let leftArrowPosition = new THREE.Vector3()
         raycaster.ray.intersectPlane(plane, leftArrowPosition)
         leftArrowPosition.add(new THREE.Vector3(CONFIG.arrows.size / 2, -CONFIG.arrows.size / 2, 0))
@@ -546,16 +566,16 @@ async function initScene() {
 
     const mouseMoveHandler = (e) => {
 
-        // Mouse position (between -1 and 1)
+        // Mouse position (between -1 and 1) & raycaster
         let position = {
             x: (e.clientX / window.innerWidth) * 2 - 1,
             y: - (e.clientY / window.innerHeight) * 2 + 1
         }
+        
+        mouseRaycaster.setFromCamera( position, camera );
 
         // Arrows
-        let raycaster = new THREE.Raycaster()
-        raycaster.setFromCamera( position, camera );
-        let intersects = raycaster.intersectObjects(arrows.children);
+        let intersects = mouseRaycaster.intersectObjects(arrows.children);
         hovered = null
         arrows.children.forEach((arrow) => {
             let hover = intersects.find((intersect) => intersect.object === arrow)
@@ -577,6 +597,30 @@ async function initScene() {
             }
         })
         document.body.style.cursor = intersects.length ? "pointer" : "default";
+
+        // Line from marker to mouse cursor
+        let lineFrom = new THREE.Vector3()
+        markerGroup.getWorldPosition(lineFrom)
+        let lineTo = new THREE.Vector3()
+        let plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+            new THREE.Vector3(0, 0, 1), 
+            new THREE.Vector3(0, 0, CONFIG.camera.raycastPlaneZ)
+        )
+        mouseRaycaster.ray.intersectPlane(plane, lineTo)
+
+        let line = new THREE.Line3(lineFrom, lineTo)
+
+        let offsetStart = new THREE.Vector3()
+        line.at(0.2, offsetStart)
+
+        markerLineGeometry.setPositions([
+            offsetStart.x, offsetStart.y, offsetStart.z,
+            line.end.x, line.end.y, line.end.z
+        ])
+
+        markerLine.material.opacity = line.distance() > 1.2 ? .2 : 1
+
+        console.log(line.distance())
 
         // Camera (disabled if orbit is enabled)
         if(CONFIG.enableOrbit) {
@@ -957,12 +1001,6 @@ function refreshArrowTexture(canvas, isLeft) {
     })
     ctx.stroke()
 }
-
-
-// ===================================
-// Canvas event handling
-// ===================================
-
 
 </script>
 
